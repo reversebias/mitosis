@@ -8,11 +8,11 @@ Nordic does not allow redistribution of their SDK or components, so download and
 
 https://www.nordicsemi.com/eng/nordic/Products/nRF5-SDK/nRF5-SDK-v12-zip/54291
 
-Tested with version 12.2
+Tested with version 11
 
 ```
-unzip nRF5_SDK_12.2.0_f012efa.zip  -d nRF5_SDK_12_2
-cd nRF5_SDK_12_2
+unzip nRF5_SDK_11.0.0_89a8197.zip  -d nRF5_SDK_11
+cd nRF5_SDK_11
 ```
 
 ## Clone repository
@@ -49,6 +49,18 @@ Should give you an output ending in:
 ```
 Info : nrf51.cpu: hardware has 4 breakpoints, 2 watchpoints
 ```
+
+## Toolchain set-up
+
+A cofiguration file that came with the SDK needs to be changed. Assuming you installed gcc with apt, the compiler root path needs to be changed in /components/toolchain/gcc/Makefile.posix, the line:
+```
+GNU_INSTALL_ROOT := /usr/local/gcc-arm-none-eabi-4_9-2015q1
+```
+Replaced with:
+```
+GNU_INSTALL_ROOT := /usr/
+```
+
 
 
 
