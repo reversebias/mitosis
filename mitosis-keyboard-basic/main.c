@@ -1,5 +1,5 @@
 
-#define COMPILE_LEFT
+#define COMPILE_RIGHT
 
 #include "mitosis.h"
 #include "nrf_drv_config.h"

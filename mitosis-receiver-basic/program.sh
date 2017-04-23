@@ -15,7 +15,7 @@ echo '============================= PROGRAMMING ============================='
 	echo "reset halt";
 	sleep 0.1;
 	echo "flash write_image erase" $HEX;
-	sleep 7;
+	sleep 11;
 	echo "reset";
 	sleep 0.1;
 	exit;
