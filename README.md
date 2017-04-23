@@ -1,7 +1,7 @@
 # Mitosis Keyboard Firmware
 Firmware for Nordic MCUs used in the Mitosis Keyboard, contains precompiled .hex files, as well as sources buildable with the Nordic SDK
 
-## Install dependancies
+## Install dependencies
 
 Tested on Ubuntu 16.04.2, but should be able to find alternatives on all distros. 
 
