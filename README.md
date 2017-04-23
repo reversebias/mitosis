@@ -1,6 +1,13 @@
 # Mitosis Keyboard Firmware
 Firmware for nordic MCUs used in the Mitosis Keyboard, contains precompiled .hex files, as well as sources buildable with the Nordic SDK
 
+## Install dependancies
+
+Tested on Ubuntu 16.04.2, but should be able to find alternatives on most distros. 
+
+```
+sudo apt install openocd gcc-arm-none-eabi
+```
 
 ## Download Nordic SDK
 
@@ -15,17 +22,21 @@ unzip nRF5_SDK_11.0.0_89a8197.zip  -d nRF5_SDK_11
 cd nRF5_SDK_11
 ```
 
+## Toolchain set-up
+
+A cofiguration file that came with the SDK needs to be changed. Assuming you installed gcc with apt, the compiler root path needs to be changed in /components/toolchain/gcc/Makefile.posix, the line:
+```
+GNU_INSTALL_ROOT := /usr/local/gcc-arm-none-eabi-4_9-2015q1
+```
+Replaced with:
+```
+GNU_INSTALL_ROOT := /usr/
+```
+
 ## Clone repository
+Inside nRF5_SDK_11/
 ```
 git clone https://github.com/reversebias/mitosis
-```
-
-## Install dependancies
-
-Tested on Ubuntu 16.04.2, but should be able to find alternatives on most distros. 
-
-```
-sudo apt install openocd gcc-arm-none-eabi
 ```
 
 ## Install udev rules
@@ -50,16 +61,38 @@ Should give you an output ending in:
 Info : nrf51.cpu: hardware has 4 breakpoints, 2 watchpoints
 ```
 
-## Toolchain set-up
+## Automatic make and programming scripts
+To use the automatic build scripts:
+```
+cd mitosis/mitosis-keyboard-basic
+./program.sh
+```
+An openocd session should be running in another terminal, as this script just triggers it.
 
-A cofiguration file that came with the SDK needs to be changed. Assuming you installed gcc with apt, the compiler root path needs to be changed in /components/toolchain/gcc/Makefile.posix, the line:
+## Manual programming
+From the factory, chips need to be mass erased:
 ```
-GNU_INSTALL_ROOT := /usr/local/gcc-arm-none-eabi-4_9-2015q1
+echo reset halt | telnet localhost 4444
+echo nrf51 mass_erase | telnet localhost 4444
 ```
-Replaced with:
+From there, the precompiled binaries can be loaded:
 ```
-GNU_INSTALL_ROOT := /usr/
+echo reset halt | telnet localhost 4444
+echo flash write_image `readlink -f precompiled-basic-left.hex` | telnet localhost 4444
+echo reset | telnet localhost 4444
 ```
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
