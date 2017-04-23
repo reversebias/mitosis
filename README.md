@@ -43,9 +43,10 @@ git clone https://github.com/reversebias/mitosis
 ```
 sudo cp mitosis/49-stlinkv2.rules /etc/udev/rules.d/
 ```
+Plug in, or replug in the programmer after this.
 
 ## OpenOCD server
-Programming header, from top to bottom:
+The programming header on the side of the keyboard, from top to bottom:
 ```
 SWCLK
 SWDIO
@@ -64,13 +65,6 @@ Info : nrf51.cpu: hardware has 4 breakpoints, 2 watchpoints
 ```
 Otherwise you likely have a loose or wrong wire.
 
-## Automatic make and programming scripts
-To use the automatic build scripts:
-```
-cd mitosis/mitosis-keyboard-basic
-./program.sh
-```
-An openocd session should be running in another terminal, as this script sends commands to it.
 
 ## Manual programming
 From the factory, these chips need to be erased:
@@ -85,6 +79,13 @@ echo flash write_image `readlink -f precompiled-basic-left.hex` | telnet localho
 echo reset | telnet localhost 4444
 ```
 
+## Automatic make and programming scripts
+To use the automatic build scripts:
+```
+cd mitosis/mitosis-keyboard-basic
+./program.sh
+```
+An openocd session should be running in another terminal, as this script sends commands to it.
 
 
 
