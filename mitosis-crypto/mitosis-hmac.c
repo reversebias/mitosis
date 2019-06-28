@@ -1,33 +1,30 @@
-#include "sha256.h"
+#include <stddef.h>
+#include <stdbool.h>
+#include <stdint.h>
+#include "mitosis-hmac.h"
+#include <stdio.h>
 
-#define SHA256_BLOCK_SIZE 64
 #define SHA256_OUTPUT_SIZE 32
-#define INNER_PAD_32 0x36363636
-#define OUTER_PAD_32 0x5c5c5c5c
+#define INNER_PAD_32 (uint32_t)0x36363636
+#define OUTER_PAD_32 (uint32_t)0x5c5c5c5c
 
-typedef struct _MITOSIS_HMAC_STATE {
-    uint8_t need_reset : 1;
-    uint8_t inner_key[SHA256_BLOCK_SIZE];
-    uint8_t outer_key[SHA256_BLOCK_SIZE];
-    sha256_context_t hash;
-} MITOSIS_HMAC_STATE;
 
 
 bool
 mitosis_hmac_init(MITOSIS_HMAC_STATE* state, const uint8_t* key, size_t len) {
     if(state == 0 || key == 0) {
         return false;
-    } 
+    }
 
     // create inner and outer key from key material
     for(int i = 0; i < sizeof(state->inner_key); i += 4) {
-        *(state->inner_key + i) = INNER_PAD_32;
+        *(uint32_t*)(state->inner_key + i) = INNER_PAD_32;
     }
 
     for(int i = 0; i < sizeof(state->outer_key); i += 4) {
-        *(state->outer_key + i) = OUTER_PAD_32;
+        *(uint32_t*)(state->outer_key + i) = OUTER_PAD_32;
     }
-    
+
     if(len > SHA256_BLOCK_SIZE) {
         uint8_t newKey[SHA256_OUTPUT_SIZE] = { 0 };
         sha256_init(&(state->hash));
@@ -39,17 +36,16 @@ mitosis_hmac_init(MITOSIS_HMAC_STATE* state, const uint8_t* key, size_t len) {
 
     uint32_t idx = 0;
     for(; len - idx > 4; idx += 4) {
-        // N.B. there might be an endian-correctness issue here.
         *(uint32_t*)(state->inner_key + idx) ^= *(uint32_t*)(key + idx);
         *(uint32_t*)(state->outer_key + idx) ^= *(uint32_t*)(key + idx);
     }
     for(; len - idx > 0; ++idx) {
         state->inner_key[idx] ^= key[idx];
-        state->outer_key[idx] ^= key[idx];        
+        state->outer_key[idx] ^= key[idx];
     }
-    
+
     sha256_init(&(state->hash));
-    
+
     sha256_update(&(state->hash), state->inner_key, sizeof(state->inner_key));
 
     return true;
