@@ -41,6 +41,7 @@ remduplicates = $(strip $(if $1,$(firstword $1) $(call remduplicates,$(filter-ou
 C_SOURCE_FILES += \
 $(abspath ./main.c) \
 $(abspath ../mitosis-hmac.c) \
+$(abspath ../mitosis-hkdf.c) \
 $(abspath ../../../components/libraries/sha256/sha256.c) \
 
 #includes common to all targets
@@ -56,7 +57,7 @@ OUTPUT_BINARY_DIRECTORY = bin
 
 BUILD_DIRECTORIES := $(sort $(OBJECT_DIRECTORY) $(OUTPUT_BINARY_DIRECTORY) $(LISTING_DIRECTORY) )
 
-CFLAGS = -DUNIX -D__unix
+CFLAGS = -DUNIX
 CFLAGS += -Wall -O3 -g3
 CFLAGS += -Wno-unused-function
 CFLAGS += -Wno-unused-variable
