@@ -40,12 +40,15 @@ remduplicates = $(strip $(if $1,$(firstword $1) $(call remduplicates,$(filter-ou
 #source common to all targets
 C_SOURCE_FILES += \
 $(abspath ./main.c) \
+$(abspath ./aes.c) \
 $(abspath ../mitosis-hmac.c) \
 $(abspath ../mitosis-hkdf.c) \
+$(abspath ../mitosis-aes-ctr.c) \
 $(abspath ../../../components/libraries/sha256/sha256.c) \
 
 #includes common to all targets
 INC_PATHS  = -I$(abspath ../)
+INC_PATHS += -I$(abspath ../../../components/drivers_nrf/hal)
 INC_PATHS += -I$(abspath ../../../components/libraries/sha256)
 INC_PATHS += -I$(abspath ../../../components/libraries/util)
 INC_PATHS += -I$(abspath ../../../components/drivers_nrf/nrf_soc_nosd)

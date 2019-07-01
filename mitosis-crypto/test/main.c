@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include "mitosis-hmac.h"
 #include "mitosis-hkdf.h"
+#include "mitosis-aes-ctr.h"
 
 typedef struct _hmac_sha256_vector {
     uint8_t key[131];
@@ -25,6 +26,13 @@ typedef struct _hkdf_sha256_vector {
     uint8_t expected_okm[82];
     uint8_t L;
 } hkdf_sha256_test_vector;
+
+typedef struct _aes_ctr_vector {
+    MITOSIS_ENCRYPT_CONTEXT context;
+    uint8_t expected_encrypted_counter[16];
+    uint8_t plaintext[16];
+    uint8_t expected_ciphertext[16];
+} aes_ctr_test_vector;
 
 #define RUN_TEST_LOG(test) \
     bool test ##_result = test(); \
@@ -349,12 +357,100 @@ error:
     return result;
 }
 
+bool aes_ctr_kat() {
+    aes_ctr_test_vector test_cases[] = {
+        {
+            {
+                {
+                    {
+                        0x2b, 0x7e, 0x15, 0x16, 0x28, 0xae, 0xd2, 0xa6,
+                        0xab, 0xf7, 0x15, 0x88, 0x09, 0xcf, 0x4f, 0x3c
+                    }, // key
+                    {
+                        0xf0, 0xf1, 0xf2, 0xf3, 0xf4, 0xf5, 0xf6, 0xf7,
+                        0xf8, 0xf9, 0xfa, 0xfb, 0xfc, 0xfd, 0xfe, 0xff
+                    }, // ecb plaintext/iv
+                    {
+                        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+                    } // ecb ciphertext/scratch
+                } // ecb
+            }, // context
+            {
+                0xec, 0x8c, 0xdf, 0x73, 0x98, 0x60, 0x7c, 0xb0,
+                0xf2, 0xd2, 0x16, 0x75, 0xea, 0x9e, 0xa1, 0xe4
+            }, // encrypted counter
+            {
+                0x6b, 0xc1, 0xbe, 0xe2, 0x2e, 0x40, 0x9f, 0x96,
+                0xe9, 0x3d, 0x7e, 0x11, 0x73, 0x93, 0x17, 0x2a
+            }, // ctr plaintext
+            {
+                0x87, 0x4d, 0x61, 0x91, 0xb6, 0x20, 0xe3, 0x26,
+                0x1b, 0xef, 0x68, 0x64, 0x99, 0x0d, 0xb6, 0xce
+            } // expected ctr ciphertext
+        }, // test case 1
+        {
+            {
+                {
+                    "my very eager mo", // key
+                    "ther just served", // ecb plaintext/iv
+                    {
+                        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+                    } // ecb ciphertext/scratch
+                } // ecb
+            }, // context
+            {
+                0xa0, 0xf3, 0x59, 0x59, 0x0a, 0xad, 0x4e, 0xcd,
+                0x1b, 0x70, 0x20, 0x38, 0x14, 0xf9, 0x6d, 0x69
+            }, // encrypted counter
+            " us nine pizzas!", // ctr plaintext
+            {
+                0x80, 0x86, 0x2a, 0x79, 0x64, 0xc4, 0x20, 0xa8,
+                0x3b, 0x00, 0x49, 0x42, 0x6e, 0x98, 0x1e, 0x48
+            } // expected ctr ciphertext
+        } // test case 2
+    };
+    bool result = true;
+
+    for(int test_idx = 0; test_idx < sizeof(test_cases)/sizeof(test_cases[0]); ++test_idx) {
+        aes_ctr_test_vector* test_case = &test_cases[test_idx];
+        uint8_t output[AES_BLOCK_SIZE] = { 0 };
+
+        // Test encryption
+        result = mitosis_aes_ctr_encrypt(&test_case->context, sizeof(output), test_case->plaintext, output);
+        if(!result) {
+            printf("%s: mitosis_aes_ctr_encrypt failed!\n", __func__);
+            return false;
+        }
+        if(!compare_expected(test_case->context.ecb.ciphertext, test_case->expected_encrypted_counter, sizeof(test_case->expected_encrypted_counter), __func__, "encrypted counter")) {
+            return false;
+        }
+        if(!compare_expected(output, test_case->expected_ciphertext, sizeof(output), __func__, "encrypted plaintext")) {
+            return false;
+        }
+
+        // Test decryption
+        result = mitosis_aes_ctr_decrypt(&test_case->context, sizeof(output), test_case->expected_ciphertext, output);
+        if(!result) {
+            printf("%s: mitosis_aes_ctr_decrypt failed!\n", __func__);
+            return false;
+        }
+        if(!compare_expected(test_case->context.ecb.ciphertext, test_case->expected_encrypted_counter, sizeof(test_case->expected_encrypted_counter), __func__, "encrypted counter")) {
+            return false;
+        }
+        if(!compare_expected(output, test_case->plaintext, sizeof(output), __func__, "decrypted plaintext")) {
+            return false;
+        }
+    }
+    return result;
+}
+
 int main(int argc, char** argv) {
     bool result = true;
     int failures = 0;
 
     RUN_TEST_LOG(hmac_sha256_kat);
     RUN_TEST_LOG(hkdf_kat);
+    RUN_TEST_LOG(aes_ctr_kat);
 
     if (result) {
         printf("All tests passed! :)\n");
