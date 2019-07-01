@@ -3,7 +3,7 @@ Interface for AES in CTR mode for mitosis
 */
 #include "mitosis-aes-ecb.h"
 
-typedef struct _mitosis_aes_ctr_state {
+typedef struct _mitosis_aes_ctr_context_t {
     uint8_t key[AES_BLOCK_SIZE];
     union {
         struct {
@@ -13,20 +13,20 @@ typedef struct _mitosis_aes_ctr_state {
         uint8_t iv_bytes[AES_BLOCK_SIZE];
     };
     uint8_t scratch[AES_BLOCK_SIZE];
-} MITOSIS_AES_CTR_STATE;
+} mitosis_aes_ctr_context_t;
 
-_Static_assert(sizeof(MITOSIS_AES_CTR_STATE) == sizeof(MITOSIS_AES_ECB_STATE));
+_Static_assert(sizeof(mitosis_aes_ctr_context_t) == sizeof(mitosis_aes_ecb_context_t));
 
-typedef union _mitosis_encrypt_context {
-    MITOSIS_AES_ECB_STATE ecb;
-    MITOSIS_AES_CTR_STATE ctr;
-} MITOSIS_ENCRYPT_CONTEXT;
+typedef union _mitosis_encrypt_context_t {
+    mitosis_aes_ecb_context_t ecb;
+    mitosis_aes_ctr_context_t ctr;
+} mitosis_encrypt_context_t;
 
 /*
 Key and nonce are 16 bytes for consistency.
 */
-bool mitosis_aes_ctr_init(const uint8_t* key, const uint8_t* nonce, MITOSIS_ENCRYPT_CONTEXT* context);
+bool mitosis_aes_ctr_init(const uint8_t* key, const uint8_t* nonce, mitosis_encrypt_context_t* context);
 
-bool mitosis_aes_ctr_encrypt(MITOSIS_ENCRYPT_CONTEXT* context, uint32_t datalen, const uint8_t* plaintext, uint8_t* ciphertext);
+bool mitosis_aes_ctr_encrypt(mitosis_encrypt_context_t* context, uint32_t datalen, const uint8_t* plaintext, uint8_t* ciphertext);
 
-bool mitosis_aes_ctr_decrypt(MITOSIS_ENCRYPT_CONTEXT* context, uint32_t datalen, const uint8_t* ciphertext, uint8_t* plaintext);
+bool mitosis_aes_ctr_decrypt(mitosis_encrypt_context_t* context, uint32_t datalen, const uint8_t* ciphertext, uint8_t* plaintext);

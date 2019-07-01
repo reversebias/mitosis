@@ -11,7 +11,7 @@
 
 
 bool
-mitosis_hmac_init(MITOSIS_HMAC_STATE* state, const uint8_t* key, size_t len) {
+mitosis_hmac_init(mitosis_hmac_context_t* state, const uint8_t* key, size_t len) {
     if(state == 0 || key == 0) {
         return false;
     }
@@ -27,9 +27,9 @@ mitosis_hmac_init(MITOSIS_HMAC_STATE* state, const uint8_t* key, size_t len) {
 
     if(len > SHA256_BLOCK_SIZE) {
         uint8_t newKey[SHA256_OUTPUT_SIZE] = { 0 };
-        sha256_init(&(state->hash));
-        sha256_update(&(state->hash), key, len);
-        sha256_final(&(state->hash), newKey);
+        sha256_init(&(state->sha256_context));
+        sha256_update(&(state->sha256_context), key, len);
+        sha256_final(&(state->sha256_context), newKey);
         key = newKey;
         len = SHA256_OUTPUT_SIZE;
     }
@@ -44,37 +44,37 @@ mitosis_hmac_init(MITOSIS_HMAC_STATE* state, const uint8_t* key, size_t len) {
         state->outer_key[idx] ^= key[idx];
     }
 
-    sha256_init(&(state->hash));
+    sha256_init(&(state->sha256_context));
 
-    sha256_update(&(state->hash), state->inner_key, sizeof(state->inner_key));
+    sha256_update(&(state->sha256_context), state->inner_key, sizeof(state->inner_key));
 
     return true;
 }
 
 bool
-mitosis_hmac_hash(MITOSIS_HMAC_STATE* state, const uint8_t* data, size_t len) {
+mitosis_hmac_hash(mitosis_hmac_context_t* state, const uint8_t* data, size_t len) {
     if(state == 0 || data == 0) {
         return false;
     }
     if(state->need_reset) {
-        sha256_init(&(state->hash));
-        sha256_update(&(state->hash), state->inner_key, sizeof(state->inner_key));
+        sha256_init(&(state->sha256_context));
+        sha256_update(&(state->sha256_context), state->inner_key, sizeof(state->inner_key));
         state->need_reset = 0;
     }
-    return sha256_update(&(state->hash), data, len) == NRF_SUCCESS;
+    return sha256_update(&(state->sha256_context), data, len) == NRF_SUCCESS;
 }
 
 bool
-mitosis_hmac_complete(MITOSIS_HMAC_STATE* state, uint8_t* hash) {
+mitosis_hmac_complete(mitosis_hmac_context_t* state, uint8_t* hash) {
     if(state == 0 || hash == 0) {
         return false;
     }
     uint8_t first_hash[SHA256_OUTPUT_SIZE];
     state->need_reset = 1;
-    sha256_final(&(state->hash), first_hash);
+    sha256_final(&(state->sha256_context), first_hash);
     // Re-use the hash object to compute the 2nd hash pass.
-    sha256_init(&(state->hash));
-    sha256_update(&(state->hash), state->outer_key, sizeof(state->outer_key));
-    sha256_update(&(state->hash), first_hash, sizeof(first_hash));
-    return sha256_final(&(state->hash), hash) == NRF_SUCCESS;
+    sha256_init(&(state->sha256_context));
+    sha256_update(&(state->sha256_context), state->outer_key, sizeof(state->outer_key));
+    sha256_update(&(state->sha256_context), first_hash, sizeof(first_hash));
+    return sha256_final(&(state->sha256_context), hash) == NRF_SUCCESS;
 }

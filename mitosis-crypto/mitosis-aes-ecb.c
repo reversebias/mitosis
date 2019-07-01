@@ -3,7 +3,7 @@
 #include <nrf.h>
 #include "mitosis-aes.h"
 
-bool mitosis_aes_ecb_init(MITOSIS_AES_ECB_STATE* state) {
+bool mitosis_aes_ecb_init(mitosis_aes_ecb_context_t* state) {
     if(state == NULL) {
         return false;
     }
@@ -12,7 +12,7 @@ bool mitosis_aes_ecb_init(MITOSIS_AES_ECB_STATE* state) {
     return true;
 }
 
-bool mitosis_aes_ecb_encrypt(MITOSIS_AES_ECB_STATE* state) {
+bool mitosis_aes_ecb_encrypt(mitosis_aes_ecb_context_t* state) {
     if(state == NULL) {
         return false;
     }

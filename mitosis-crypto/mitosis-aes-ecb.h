@@ -5,12 +5,12 @@
 
 #define AES_BLOCK_SIZE 16
 
-typedef struct _mitosis_aes_ecb_state {
+typedef struct _mitosis_aes_ecb_context_t {
     uint8_t key[AES_BLOCK_SIZE];
     uint8_t plaintext[AES_BLOCK_SIZE];
     uint8_t ciphertext[AES_BLOCK_SIZE];
-} MITOSIS_AES_ECB_STATE;
+} mitosis_aes_ecb_context_t;
 
-bool mitosis_aes_ecb_init(MITOSIS_AES_ECB_STATE* state);
+bool mitosis_aes_ecb_init(mitosis_aes_ecb_context_t* state);
 
-bool mitosis_aes_ecb_encrypt(MITOSIS_AES_ECB_STATE* state);
+bool mitosis_aes_ecb_encrypt(mitosis_aes_ecb_context_t* state);

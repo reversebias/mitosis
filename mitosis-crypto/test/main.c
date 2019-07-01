@@ -160,7 +160,7 @@ bool hmac_sha256_kat() {
             }
         },
     };
-    MITOSIS_HMAC_STATE state = { 0 };
+    mitosis_hmac_context_t state = { 0 };
 
     for(int test_idx = 0; test_idx < sizeof(test_cases)/sizeof(test_cases[0]); ++test_idx) {
         hmac_sha256_test_vector* test_case = &test_cases[test_idx];
@@ -397,7 +397,7 @@ bool aes_ctr_kat() {
         } // test case 2
     };
     bool result = true;
-    MITOSIS_ENCRYPT_CONTEXT context;
+    mitosis_encrypt_context_t context;
 
     for(int test_idx = 0; test_idx < sizeof(test_cases)/sizeof(test_cases[0]); ++test_idx) {
         aes_ctr_test_vector* test_case = &test_cases[test_idx];

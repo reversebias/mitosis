@@ -748,11 +748,11 @@ void aes_decrypt(const uint8_t in[], uint8_t out[], const uint32_t key[], int ke
 ** MITOSIS AES ECB INTERFACE FUNCTIONS
 *******************/
 
-bool mitosis_aes_ecb_init(MITOSIS_AES_ECB_STATE* state) {
+bool mitosis_aes_ecb_init(mitosis_aes_ecb_context_t* state) {
 	return true;
 }
 
-bool mitosis_aes_ecb_encrypt(MITOSIS_AES_ECB_STATE* state) {
+bool mitosis_aes_ecb_encrypt(mitosis_aes_ecb_context_t* state) {
 	uint32_t key_schedule[60];
 	aes_key_setup(state->key, key_schedule, 128);
 	aes_encrypt(state->plaintext, state->ciphertext, key_schedule, 128);
