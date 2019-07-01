@@ -5,7 +5,7 @@
 
 bool mitosis_aes_ctr_init(const uint8_t* key, const uint8_t* nonce, MITOSIS_ENCRYPT_CONTEXT* context) {
     memset(context, 0, sizeof(*context));
-    memcpy(&context->ctr.key, key, sizeof(context->ctr.key));
+    memcpy(context->ctr.key, key, sizeof(context->ctr.key));
     memcpy(context->ctr.iv_bytes, nonce, sizeof(context->ctr.iv_bytes));
     return mitosis_aes_ecb_init(&context->ecb);
 }

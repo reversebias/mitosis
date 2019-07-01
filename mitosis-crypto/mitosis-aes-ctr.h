@@ -7,7 +7,7 @@ typedef struct _mitosis_aes_ctr_state {
     uint8_t key[AES_BLOCK_SIZE];
     union {
         struct {
-            uint8_t nonce[12];
+            uint8_t nonce[AES_BLOCK_SIZE - sizeof(uint32_t)];
             uint32_t counter;
         } iv;
         uint8_t iv_bytes[AES_BLOCK_SIZE];
