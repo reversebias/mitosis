@@ -44,6 +44,8 @@ mitosis_hkdf_expand(const uint8_t* prk, size_t prk_len, const uint8_t* info, siz
         return result;
     }
 
+    // i starts at 1 so it can be used to save the memory needed for a separate
+    // block counter.
     for(uint8_t i = 1; i <= iterations && i > 0; ++i) {
         if(i > 1) {
             result = mitosis_hmac_hash(&state, scratch, sizeof(scratch));

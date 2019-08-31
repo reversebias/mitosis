@@ -23,7 +23,12 @@
 
 #define MITOSIS_NONCE_INFO "encryption nonce"
 
+typedef struct _mitosis_crypto_context_t {
+    mitosis_hmac_context_t hmac;
+    mitosis_encrypt_context_t encrypt;
+} mitosis_crypto_context_t;
 
-bool mitosis_generate_keyboard_keys(bool left, uint8_t* output_encrypt_key, size_t encrypt_key_len, uint8_t* output_hmac_key, size_t hmac_key_len, uint8_t* output_encrypt_nonce, size_t nonce_len);
+
+bool mitosis_crypto_init(mitosis_crypto_context_t* context, bool left);
 
 #endif // _MITOSIS_CRYPTO

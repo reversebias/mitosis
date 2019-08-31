@@ -3,8 +3,7 @@
 #include <string.h>
 #include "mitosis-crypto.h"
 
-bool mitosis_generate_keyboard_keys(bool left, uint8_t* output_encrypt_key, size_t encrypt_key_len, uint8_t* output_hmac_key, size_t hmac_key_len, uint8_t* output_encrypt_nonce, size_t nonce_len) {
-
+bool mitosis_crypto_init(mitosis_crypto_context_t* context, bool left) {
     bool result = true;
     uint8_t ikm[sizeof((uint8_t[])MITOSIS_MASTER_SECRET_SEED)] = MITOSIS_MASTER_SECRET_SEED;
     uint8_t prk[MITOSIS_HMAC_OUTPUT_SIZE];
@@ -19,17 +18,37 @@ bool mitosis_generate_keyboard_keys(bool left, uint8_t* output_encrypt_key, size
         return result;
     }
 
-    result = mitosis_hkdf_expand(prk, sizeof(prk), (uint8_t*)MITOSIS_ENCRYPT_KEY_INFO, sizeof(MITOSIS_ENCRYPT_KEY_INFO), output_encrypt_key, encrypt_key_len);
+    result =
+        mitosis_hkdf_expand(
+            prk, sizeof(prk),
+            (uint8_t*)MITOSIS_ENCRYPT_KEY_INFO, sizeof(MITOSIS_ENCRYPT_KEY_INFO),
+            context->encrypt.ctr.key, sizeof(context->encrypt.ctr.key));
     if(!result) {
         return result;
     }
 
-    result = mitosis_hkdf_expand(prk, sizeof(prk), (uint8_t*)MITOSIS_HMAC_KEY_INFO, sizeof(MITOSIS_HMAC_KEY_INFO), output_hmac_key, hmac_key_len);
+    result =
+        mitosis_hkdf_expand(
+            prk, sizeof(prk),
+            (uint8_t*)MITOSIS_NONCE_INFO,
+            sizeof(MITOSIS_NONCE_INFO),
+            context->encrypt.ctr.iv_bytes, sizeof(context->encrypt.ctr.iv_bytes));
     if(!result) {
         return result;
     }
 
-    result = mitosis_hkdf_expand(prk, sizeof(prk), (uint8_t*)MITOSIS_NONCE_INFO, sizeof(MITOSIS_NONCE_INFO), output_encrypt_nonce, nonce_len);
+    // prk can be overwritten here because mitosis_hkdf_expand is done with it
+    // by the time that output is being written.
+    result =
+        mitosis_hkdf_expand(
+            prk, sizeof(prk),
+            (uint8_t*)MITOSIS_HMAC_KEY_INFO, sizeof(MITOSIS_HMAC_KEY_INFO),
+            prk, sizeof(prk));
+    if(!result) {
+        return result;
+    }
+
+    result = mitosis_hmac_init((&context->hmac), prk, sizeof(prk));
 
     return result;
 }

@@ -456,30 +456,30 @@ bool aes_ctr_kat() {
 }
 
 bool verify_key_generation() {
-    uint8_t key[16];
-    uint8_t hmac[16];
-    uint8_t nonce[16];
+    mitosis_crypto_context_t context;
     bool result = true;
 
-    result = mitosis_generate_keyboard_keys(true, key, sizeof(key), hmac, sizeof(hmac), nonce, sizeof(nonce));
+    result = mitosis_crypto_init(&context, true);
     if(!result) {
-        printf("%s: %s mitosis_generate_keyboard_keys failed!\n", __func__, "left");
+        printf("%s: %s mitosis_crypto_init failed!\n", __func__, "left");
         return false;
     }
 
-    print_hex("left key", key, sizeof(key));
-    print_hex("left hmac", hmac, sizeof(hmac));
-    print_hex("left nonce", nonce, sizeof(nonce));
+    print_hex("       left key", context.encrypt.ctr.key, sizeof(context.encrypt.ctr.key));
+    print_hex("left inner hmac", context.hmac.inner_key, sizeof(context.hmac.inner_key));
+    print_hex("left outer hmac", context.hmac.outer_key, sizeof(context.hmac.outer_key));
+    print_hex("     left nonce", context.encrypt.ctr.iv_bytes, sizeof(context.encrypt.ctr.iv_bytes));
 
-    result = mitosis_generate_keyboard_keys(false, key, sizeof(key), hmac, sizeof(hmac), nonce, sizeof(nonce));
+    result = mitosis_crypto_init(&context, false);
     if(!result) {
-        printf("%s: %s mitosis_generate_keyboard_keys failed!\n", __func__, "right");
+        printf("\n%s: %s mitosis_crypto_init failed!\n", __func__, "right");
         return false;
     }
 
-    print_hex("\nright key", key, sizeof(key));
-    print_hex("right hmac", hmac, sizeof(hmac));
-    print_hex("right nonce", nonce, sizeof(nonce));
+    print_hex("\n       right key", context.encrypt.ctr.key, sizeof(context.encrypt.ctr.key));
+    print_hex("right inner hmac", context.hmac.inner_key, sizeof(context.hmac.inner_key));
+    print_hex("right outer hmac", context.hmac.outer_key, sizeof(context.hmac.outer_key));
+    print_hex("     right nonce", context.encrypt.ctr.iv_bytes, sizeof(context.encrypt.ctr.iv_bytes));
 
     return result;
 }

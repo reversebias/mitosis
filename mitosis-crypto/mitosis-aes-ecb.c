@@ -1,7 +1,8 @@
 #include <stdint.h>
 #include <stdbool.h>
+#include <stddef.h>
 #include <nrf.h>
-#include "mitosis-aes.h"
+#include "mitosis-aes-ecb.h"
 
 bool mitosis_aes_ecb_init(mitosis_aes_ecb_context_t* state) {
     if(state == NULL) {
