@@ -9,6 +9,7 @@
 #include "nrf_delay.h"
 #include "nrf_drv_clock.h"
 #include "nrf_drv_rtc.h"
+#include "mitosis-crypto.h"
 
 
 /*****************************************************************************/
@@ -23,8 +24,11 @@ const nrf_drv_rtc_t rtc_deb = NRF_DRV_RTC_INSTANCE(1); /**< Declaring an instanc
 #define TX_PAYLOAD_LENGTH 3 ///< 3 byte payload length when transmitting
 
 // Data and acknowledgement payloads
-static uint8_t data_payload[TX_PAYLOAD_LENGTH];                ///< Payload to send to Host. 
+static uint8_t data_payload[TX_PAYLOAD_LENGTH];                ///< Payload to send to Host.
 static uint8_t ack_payload[NRF_GZLL_CONST_MAX_PAYLOAD_LENGTH]; ///< Placeholder for received ACK payloads from Host.
+
+// Crypto state
+static mitosis_crypto_context_t crypto;
 
 // Debounce time (dependent on tick frequency)
 #define DEBOUNCE 5
@@ -36,7 +40,7 @@ static uint32_t debounce_ticks, activity_ticks;
 static volatile bool debouncing = false;
 
 // Debug helper variables
-static volatile bool init_ok, enable_ok, push_ok, pop_ok, tx_success;  
+static volatile bool init_ok, enable_ok, push_ok, pop_ok, tx_success;
 
 // Setup switch pins with pullups
 static void gpio_config(void)
@@ -102,6 +106,8 @@ static void send_data(void)
                       ((keys & 1<<S23) ? 1:0) << 1 | \
                       0 << 0;
 
+    // TODO: Add encryption here. But need to handle if an interrupt comes in while doing a crypto operation.
+    // Queue?
     nrf_gzll_add_packet_to_tx_fifo(PIPE_NUMBER, data_payload, TX_PAYLOAD_LENGTH);
 }
 
@@ -192,8 +198,8 @@ int main()
 {
     // Initialize Gazell
     nrf_gzll_init(NRF_GZLL_MODE_DEVICE);
-    
-    // Attempt sending every packet up to 100 times    
+
+    // Attempt sending every packet up to 100 times
     nrf_gzll_set_max_tx_attempts(100);
 
     // Addressing
@@ -204,7 +210,7 @@ int main()
     nrf_gzll_enable();
 
     // Configure 32kHz xtal oscillator
-    lfclk_config(); 
+    lfclk_config();
 
     // Configure RTC peripherals with ticks
     rtc_config();
@@ -216,13 +222,21 @@ int main()
     NRF_GPIOTE->INTENSET = GPIOTE_INTENSET_PORT_Msk;
     NVIC_EnableIRQ(GPIOTE_IRQn);
 
+#ifdef COMPILE_LEFT
+    mitosis_crypto_init(&crypto, true);
+#elif defined(COMPILE_RIGHT)
+    mitosis_crypto_init(&crypto, false);
+#else
+    #error "no keyboard half specified"
+#endif
+
 
     // Main loop, constantly sleep, waiting for RTC and gpio IRQs
     while(1)
     {
         __SEV();
         __WFE();
-        __WFE(); 
+        __WFE();
     }
 }
 
@@ -252,7 +266,7 @@ void GPIOTE_IRQHandler(void)
 
 void  nrf_gzll_device_tx_success(uint32_t pipe, nrf_gzll_device_tx_info_t tx_info)
 {
-    uint32_t ack_payload_length = NRF_GZLL_CONST_MAX_PAYLOAD_LENGTH;    
+    uint32_t ack_payload_length = NRF_GZLL_CONST_MAX_PAYLOAD_LENGTH;
 
     if (tx_info.payload_received_in_ack)
     {
@@ -264,7 +278,7 @@ void  nrf_gzll_device_tx_success(uint32_t pipe, nrf_gzll_device_tx_info_t tx_inf
 // no action is taken when a packet fails to send, this might need to change
 void nrf_gzll_device_tx_failed(uint32_t pipe, nrf_gzll_device_tx_info_t tx_info)
 {
-    
+
 }
 
 // Callbacks not needed

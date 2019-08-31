@@ -48,7 +48,12 @@ bool mitosis_crypto_init(mitosis_crypto_context_t* context, bool left) {
         return result;
     }
 
-    result = mitosis_hmac_init((&context->hmac), prk, sizeof(prk));
+    result = mitosis_hmac_init(&(context->hmac), prk, sizeof(prk));
+    if(!result) {
+        return result;
+    }
+
+    result = mitosis_aes_ecb_init(&(context->encrypt.ecb));
 
     return result;
 }

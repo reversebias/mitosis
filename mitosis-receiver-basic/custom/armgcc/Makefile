@@ -3,7 +3,7 @@ PROJECT_NAME := mitosis-receiver-basic
 export OUTPUT_FILENAME
 #MAKEFILE_NAME := $(CURDIR)/$(word $(words $(MAKEFILE_LIST)),$(MAKEFILE_LIST))
 MAKEFILE_NAME := $(MAKEFILE_LIST)
-MAKEFILE_DIR := $(dir $(MAKEFILE_NAME) ) 
+MAKEFILE_DIR := $(dir $(MAKEFILE_NAME) )
 
 TEMPLATE_PATH = ../../../../components/toolchain/gcc
 ifeq ($(OS),Windows_NT)
@@ -17,7 +17,7 @@ RM := rm -rf
 
 #echo suspend
 ifeq ("$(VERBOSE)","1")
-NO_ECHO := 
+NO_ECHO :=
 else
 NO_ECHO := @
 endif
@@ -39,6 +39,12 @@ remduplicates = $(strip $(if $1,$(firstword $1) $(call remduplicates,$(filter-ou
 C_SOURCE_FILES += \
 $(abspath ../../../../components/toolchain/system_nrf51.c) \
 $(abspath ../../main.c) \
+$(abspath ../../../../components/libraries/sha256/sha256.c) \
+$(abspath ../../../mitosis-crypto/mitosis-hmac.c) \
+$(abspath ../../../mitosis-crypto/mitosis-hkdf.c) \
+$(abspath ../../../mitosis-crypto/mitosis-keys.c) \
+$(abspath ../../../mitosis-crypto/mitosis-aes-ecb.c) \
+$(abspath ../../../mitosis-crypto/mitosis-aes-ctr.c) \
 $(abspath ../../../../components/libraries/util/app_error.c) \
 $(abspath ../../../../components/libraries/util/app_error_weak.c) \
 $(abspath ../../../../components/libraries/fifo/app_fifo.c) \
@@ -63,9 +69,11 @@ INC_PATHS += -I$(abspath ../../../../components/drivers_nrf/nrf_soc_nosd)
 INC_PATHS += -I$(abspath ../../../../components/device)
 INC_PATHS += -I$(abspath ../../../../components/libraries/uart)
 INC_PATHS += -I$(abspath ../../../../components/drivers_nrf/hal)
+INC_PATHS += -I$(abspath ../../../../components/libraries/sha256)
 INC_PATHS += -I$(abspath ../../../../components/drivers_nrf/delay)
 INC_PATHS += -I$(abspath ../../../../components/toolchain/CMSIS/Include)
 INC_PATHS += -I$(abspath ../..)
+INC_PATHS += -I$(abspath ../../../mitosis-crypto)
 INC_PATHS += -I$(abspath ../../../../components/libraries/util)
 INC_PATHS += -I$(abspath ../../../../components/drivers_nrf/uart)
 INC_PATHS += -I$(abspath ../../../../components/drivers_nrf/common)
@@ -95,7 +103,7 @@ CFLAGS += -Wno-unused-variable
 CFLAGS += -mfloat-abi=soft
 # keep every function in separate section. This will allow linker to dump unused functions
 CFLAGS += -ffunction-sections -fdata-sections -fno-strict-aliasing
-CFLAGS += -fno-builtin --short-enums 
+CFLAGS += -fno-builtin --short-enums
 # keep every function in separate section. This will allow linker to dump unused functions
 LDFLAGS += -Xlinker -Map=$(LISTING_DIRECTORY)/$(OUTPUT_FILENAME).map
 LDFLAGS += -mthumb -mabi=aapcs -L $(TEMPLATE_PATH) -T$(LINKER_SCRIPT)
@@ -182,7 +190,7 @@ genbin:
 	$(NO_ECHO)$(OBJCOPY) -O binary $(OUTPUT_BINARY_DIRECTORY)/$(OUTPUT_FILENAME).out $(OUTPUT_BINARY_DIRECTORY)/$(OUTPUT_FILENAME).bin
 
 ## Create binary .hex file from the .out file
-genhex: 
+genhex:
 	@echo Preparing: $(OUTPUT_FILENAME).hex
 	$(NO_ECHO)$(OBJCOPY) -O ihex $(OUTPUT_BINARY_DIRECTORY)/$(OUTPUT_FILENAME).out $(OUTPUT_BINARY_DIRECTORY)/$(OUTPUT_FILENAME).hex
 echosize:
