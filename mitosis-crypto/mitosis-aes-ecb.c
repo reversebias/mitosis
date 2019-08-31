@@ -31,7 +31,7 @@ bool mitosis_aes_ecb_encrypt(mitosis_aes_ecb_context_t* state) {
         wait_counter--;
         if(wait_counter == 0)
         {
-        return false;
+            return false;
         }
     }
     NRF_ECB->EVENTS_ENDECB = 0;

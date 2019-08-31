@@ -3,9 +3,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
-#include "mitosis-hmac.h"
-#include "mitosis-hkdf.h"
-#include "mitosis-aes-ctr.h"
+#include "mitosis-crypto.h"
 
 typedef struct _hmac_sha256_vector {
     uint8_t key[131];
@@ -457,6 +455,35 @@ bool aes_ctr_kat() {
     return result;
 }
 
+bool verify_key_generation() {
+    uint8_t key[16];
+    uint8_t hmac[16];
+    uint8_t nonce[16];
+    bool result = true;
+
+    result = mitosis_generate_keyboard_keys(true, key, sizeof(key), hmac, sizeof(hmac), nonce, sizeof(nonce));
+    if(!result) {
+        printf("%s: %s mitosis_generate_keyboard_keys failed!\n", __func__, "left");
+        return false;
+    }
+
+    print_hex("left key", key, sizeof(key));
+    print_hex("left hmac", hmac, sizeof(hmac));
+    print_hex("left nonce", nonce, sizeof(nonce));
+
+    result = mitosis_generate_keyboard_keys(false, key, sizeof(key), hmac, sizeof(hmac), nonce, sizeof(nonce));
+    if(!result) {
+        printf("%s: %s mitosis_generate_keyboard_keys failed!\n", __func__, "right");
+        return false;
+    }
+
+    print_hex("\nright key", key, sizeof(key));
+    print_hex("right hmac", hmac, sizeof(hmac));
+    print_hex("right nonce", nonce, sizeof(nonce));
+
+    return result;
+}
+
 int main(int argc, char** argv) {
     bool result = true;
     int failures = 0;
@@ -464,6 +491,7 @@ int main(int argc, char** argv) {
     RUN_TEST_LOG(hmac_sha256_kat);
     RUN_TEST_LOG(hkdf_kat);
     RUN_TEST_LOG(aes_ctr_kat);
+    RUN_TEST_LOG(verify_key_generation);
 
     if (result) {
         printf("All tests passed! :)\n");
