@@ -484,6 +484,42 @@ bool verify_key_generation() {
     return result;
 }
 
+bool verify_key_encryption_decryption_test() {
+    bool result = true;
+    uint8_t data[] = {'a', 'b', 'c'};
+
+    mitosis_crypto_context_t keys;
+    for(int i = 0; i < 2; ++i) {
+        char* key_half = (i ? "left" : "right");
+
+        result = mitosis_crypto_init(&keys, i);
+        if(!result) {
+            printf("%s: %s mitosis_crypto_init failed!\n", __func__, key_half);
+            return false;
+        }
+        // Initialize the counter to zero.
+        keys.encrypt.ctr.iv.counter = 0;
+
+        result = mitosis_aes_ctr_encrypt(&(keys.encrypt), sizeof(data), data, data);
+        if(!result) {
+            printf("%s: %s mitosis_aes_ctr_encrypt in-place failed!\n", __func__, key_half);
+            return false;
+        }
+
+        result = mitosis_aes_ctr_decrypt(&(keys.encrypt), sizeof(data), data, data);
+        if(!result) {
+            printf("%s: %s mitosis_aes_ctr_decrypt in-place failed!\n", __func__, key_half);
+            return false;
+        }
+
+        if(!compare_expected(data, (uint8_t*)"abc", sizeof(data), __func__, key_half)) {
+            return false;
+        }
+    }
+
+    return result;
+}
+
 int main(int argc, char** argv) {
     bool result = true;
     int failures = 0;
@@ -492,6 +528,7 @@ int main(int argc, char** argv) {
     RUN_TEST_LOG(hkdf_kat);
     RUN_TEST_LOG(aes_ctr_kat);
     RUN_TEST_LOG(verify_key_generation);
+    RUN_TEST_LOG(verify_key_encryption_decryption_test);
 
     if (result) {
         printf("All tests passed! :)\n");
