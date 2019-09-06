@@ -497,8 +497,6 @@ bool verify_key_encryption_decryption_test() {
             printf("%s: %s mitosis_crypto_init failed!\n", __func__, key_half);
             return false;
         }
-        // Initialize the counter to zero.
-        keys.encrypt.ctr.iv.counter = 0;
 
         result = mitosis_aes_ctr_encrypt(&(keys.encrypt), sizeof(data), data, data);
         if(!result) {

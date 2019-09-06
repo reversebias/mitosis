@@ -2,6 +2,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <string.h>
 #include "app_uart.h"
 #include "nrf_drv_uart.h"
 #include "app_error.h"
@@ -40,6 +41,7 @@
 // Cryptographic keys and state
 static mitosis_crypto_context_t left_crypto;
 static mitosis_crypto_context_t right_crypto;
+static volatile bool decrypting = false;
 
 
 // Data and acknowledgement payloads
@@ -108,13 +110,8 @@ int main(void)
     nrf_gzll_enable();
 
     // Initialize crypto keys
-    if (!mitosis_crypto_init(&left_crypto, true)) {
-        // Signal failure? Fallback to unencrypted?
-    }
-
-    if (!mitosis_crypto_init(&right_crypto, false)) {
-        // Signal failure? Fallback to unencrypted?
-    }
+    mitosis_crypto_init(&left_crypto, true);
+    mitosis_crypto_init(&right_crypto, false);
 
     // main loop
     while (true)
@@ -259,21 +256,55 @@ void nrf_gzll_disabled() {}
 // If a data packet was received, identify half, and throw flag
 void nrf_gzll_host_rx_data_ready(uint32_t pipe, nrf_gzll_host_rx_info_t rx_info)
 {
-    uint32_t data_payload_length = NRF_GZLL_CONST_MAX_PAYLOAD_LENGTH;
+    mitosis_crypto_payload_t payload;
+    uint8_t hmac_scratch[MITOSIS_HMAC_OUTPUT_SIZE];
+    uint32_t payload_length = sizeof(payload);
 
     if (pipe == 0)
     {
-        packet_received_left = true;
-        left_active = 0;
-        // Pop packet and write first byte of the payload to the GPIO port.
-        nrf_gzll_fetch_packet_from_rx_fifo(pipe, data_payload_left, &data_payload_length);
+        // Pop packet and write payload to temp storage for verification.
+        nrf_gzll_fetch_packet_from_rx_fifo(pipe, (uint8_t*) &payload, &payload_length);
+        // If a crypto operation is in-progress, just ack the payload and continue.
+        // This could cause missing keypresses, so consider queueing the payload
+        // and process it as soon as this is complete.
+        if (!decrypting)
+        {
+            decrypting = true;
+            mitosis_hmac_hash(&left_crypto.hmac, payload.data, sizeof(payload.data) + sizeof(payload.counter));
+            mitosis_hmac_complete(&left_crypto.hmac, hmac_scratch);
+            if (memcmp(payload.mac, hmac_scratch, sizeof(payload.mac)) == 0)
+            {
+                // This is a valid message from the left keyboard; decrypt it.
+                left_crypto.encrypt.ctr.iv.counter = payload.counter;
+                mitosis_aes_ctr_decrypt(&left_crypto.encrypt, sizeof(payload.data), payload.data, data_payload_left);
+                packet_received_left = true;
+                left_active = 0;
+            }
+            decrypting = false;
+        }
     }
     else if (pipe == 1)
     {
-        packet_received_right = true;
-        right_active = 0;
-        // Pop packet and write first byte of the payload to the GPIO port.
-        nrf_gzll_fetch_packet_from_rx_fifo(pipe, data_payload_right, &data_payload_length);
+        // Pop packet and write payload to temp storage for verification.
+        nrf_gzll_fetch_packet_from_rx_fifo(pipe, (uint8_t*) &payload, &payload_length);
+        // If a crypto operation is in-progress, just ack the payload and continue.
+        // This could cause missing keypresses, so consider queueing the payload
+        // and process it as soon as this is complete.
+        if (!decrypting)
+        {
+            decrypting = true;
+            mitosis_hmac_hash(&right_crypto.hmac, payload.data, sizeof(payload.data) + sizeof(payload.counter));
+            mitosis_hmac_complete(&right_crypto.hmac, hmac_scratch);
+            if (memcmp(payload.mac, hmac_scratch, sizeof(payload.mac)) == 0)
+            {
+                // Valid message from the right keyboard; decrypt it.
+                right_crypto.encrypt.ctr.iv.counter = payload.counter;
+                mitosis_aes_ctr_decrypt(&right_crypto.encrypt, sizeof(payload.data), payload.data, data_payload_right);
+                packet_received_right = true;
+                right_active = 0;
+            }
+            decrypting = false;
+        }
     }
 
     // not sure if required, I guess if enough packets are missed during blocking uart

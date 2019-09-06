@@ -9,6 +9,7 @@
 #include "nrf_delay.h"
 #include "nrf_drv_clock.h"
 #include "nrf_drv_rtc.h"
+#include <string.h>
 #include "mitosis-crypto.h"
 
 
@@ -21,14 +22,16 @@ const nrf_drv_rtc_t rtc_deb = NRF_DRV_RTC_INSTANCE(1); /**< Declaring an instanc
 
 
 // Define payload length
-#define TX_PAYLOAD_LENGTH 3 ///< 3 byte payload length when transmitting
+#define TX_PAYLOAD_LENGTH sizeof(mitosis_crypto_payload_t) ///< 23 byte payload length when transmitting
 
 // Data and acknowledgement payloads
-static uint8_t data_payload[TX_PAYLOAD_LENGTH];                ///< Payload to send to Host.
+static mitosis_crypto_payload_t data_payload;                  ///< Payload to send to Host.
 static uint8_t ack_payload[NRF_GZLL_CONST_MAX_PAYLOAD_LENGTH]; ///< Placeholder for received ACK payloads from Host.
 
 // Crypto state
 static mitosis_crypto_context_t crypto;
+static uint8_t hmac_scratch[MITOSIS_HMAC_OUTPUT_SIZE];
+static volatile bool encrypting = false;
 
 // Debounce time (dependent on tick frequency)
 #define DEBOUNCE 5
@@ -79,36 +82,53 @@ static uint32_t read_keys(void)
 // Assemble packet and send to receiver
 static void send_data(void)
 {
-    data_payload[0] = ((keys & 1<<S01) ? 1:0) << 7 | \
-                      ((keys & 1<<S02) ? 1:0) << 6 | \
-                      ((keys & 1<<S03) ? 1:0) << 5 | \
-                      ((keys & 1<<S04) ? 1:0) << 4 | \
-                      ((keys & 1<<S05) ? 1:0) << 3 | \
-                      ((keys & 1<<S06) ? 1:0) << 2 | \
-                      ((keys & 1<<S07) ? 1:0) << 1 | \
-                      ((keys & 1<<S08) ? 1:0) << 0;
+    // If an encryption operation is already in-progress, skip reading the keys
+    // and just return.
+    // This could cause missing keypresses so consider queueing the work to be
+    // done once the crypto operation is done.
+    if (!encrypting)
+    {
+        encrypting = true;
+        uint8_t* data = data_payload.data;
+        data[0] = ((keys & 1<<S01) ? 1:0) << 7 | \
+                  ((keys & 1<<S02) ? 1:0) << 6 | \
+                  ((keys & 1<<S03) ? 1:0) << 5 | \
+                  ((keys & 1<<S04) ? 1:0) << 4 | \
+                  ((keys & 1<<S05) ? 1:0) << 3 | \
+                  ((keys & 1<<S06) ? 1:0) << 2 | \
+                  ((keys & 1<<S07) ? 1:0) << 1 | \
+                  ((keys & 1<<S08) ? 1:0) << 0;
 
-    data_payload[1] = ((keys & 1<<S09) ? 1:0) << 7 | \
-                      ((keys & 1<<S10) ? 1:0) << 6 | \
-                      ((keys & 1<<S11) ? 1:0) << 5 | \
-                      ((keys & 1<<S12) ? 1:0) << 4 | \
-                      ((keys & 1<<S13) ? 1:0) << 3 | \
-                      ((keys & 1<<S14) ? 1:0) << 2 | \
-                      ((keys & 1<<S15) ? 1:0) << 1 | \
-                      ((keys & 1<<S16) ? 1:0) << 0;
+        data[1] = ((keys & 1<<S09) ? 1:0) << 7 | \
+                  ((keys & 1<<S10) ? 1:0) << 6 | \
+                  ((keys & 1<<S11) ? 1:0) << 5 | \
+                  ((keys & 1<<S12) ? 1:0) << 4 | \
+                  ((keys & 1<<S13) ? 1:0) << 3 | \
+                  ((keys & 1<<S14) ? 1:0) << 2 | \
+                  ((keys & 1<<S15) ? 1:0) << 1 | \
+                  ((keys & 1<<S16) ? 1:0) << 0;
 
-    data_payload[2] = ((keys & 1<<S17) ? 1:0) << 7 | \
-                      ((keys & 1<<S18) ? 1:0) << 6 | \
-                      ((keys & 1<<S19) ? 1:0) << 5 | \
-                      ((keys & 1<<S20) ? 1:0) << 4 | \
-                      ((keys & 1<<S21) ? 1:0) << 3 | \
-                      ((keys & 1<<S22) ? 1:0) << 2 | \
-                      ((keys & 1<<S23) ? 1:0) << 1 | \
-                      0 << 0;
+        data[2] = ((keys & 1<<S17) ? 1:0) << 7 | \
+                  ((keys & 1<<S18) ? 1:0) << 6 | \
+                  ((keys & 1<<S19) ? 1:0) << 5 | \
+                  ((keys & 1<<S20) ? 1:0) << 4 | \
+                  ((keys & 1<<S21) ? 1:0) << 3 | \
+                  ((keys & 1<<S22) ? 1:0) << 2 | \
+                  ((keys & 1<<S23) ? 1:0) << 1 | \
+                  0 << 0;
 
-    // TODO: Add encryption here. But need to handle if an interrupt comes in while doing a crypto operation.
-    // Queue?
-    nrf_gzll_add_packet_to_tx_fifo(PIPE_NUMBER, data_payload, TX_PAYLOAD_LENGTH);
+        mitosis_aes_ctr_encrypt(&crypto.encrypt, sizeof(data_payload.data), data_payload.data, data_payload.data);
+        // Copy the used counter and increment at the same time.
+        data_payload.counter = crypto.encrypt.ctr.iv.counter++;
+        // compute hmac on data and counter.
+        mitosis_hmac_hash(&crypto.hmac, data_payload.data, sizeof(data_payload.data) + sizeof(data_payload.counter));
+        mitosis_hmac_complete(&crypto.hmac, hmac_scratch);
+        // copy hmac
+        memcpy(data_payload.mac, hmac_scratch, sizeof(data_payload.mac));
+
+        nrf_gzll_add_packet_to_tx_fifo(PIPE_NUMBER, (uint8_t*) &data_payload, TX_PAYLOAD_LENGTH);
+        encrypting = false;
+    }
 }
 
 // 8Hz held key maintenance, keeping the reciever keystates valid
@@ -286,4 +306,3 @@ void nrf_gzll_host_rx_data_ready(uint32_t pipe, nrf_gzll_host_rx_info_t rx_info)
 {}
 void nrf_gzll_disabled()
 {}
-

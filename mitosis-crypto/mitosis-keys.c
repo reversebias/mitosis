@@ -37,6 +37,9 @@ bool mitosis_crypto_init(mitosis_crypto_context_t* context, bool left) {
         return result;
     }
 
+    // Initialize counter to zero.
+    context->encrypt.ctr.iv.counter = 0;
+
     // prk can be overwritten here because mitosis_hkdf_expand is done with it
     // by the time that output is being written.
     result =
