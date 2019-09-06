@@ -42,7 +42,7 @@ typedef struct _aes_ctr_vector {
     result &= test ##_result; \
 
 
-void print_hex(char* label, uint8_t* bytes, size_t len) {
+void print_hex(const char* label, const uint8_t* bytes, size_t len) {
     for(int idx = 0; idx < len; ++idx) {
         if(idx == 0) {
             printf("%s:\t%02x ", label, bytes[idx]);
@@ -54,7 +54,7 @@ void print_hex(char* label, uint8_t* bytes, size_t len) {
     }
 }
 
-bool compare_expected(uint8_t* actual, uint8_t* expected, size_t len, const char* func, const char* label) {
+bool compare_expected(const uint8_t* actual, const uint8_t* expected, size_t len, const char* func, const char* label) {
     if(memcmp(actual, expected, len) != 0) {
         printf("%s: expected %s doesn't match actual\n", func, label);
         print_hex("Actual  ", actual, len);
@@ -518,6 +518,90 @@ bool verify_key_encryption_decryption_test() {
     return result;
 }
 
+bool end_to_end_test() {
+    bool result = true;
+    const uint8_t verify[] = { 'a', 0xaa, 'c', 0x55 };
+    const uint32_t counter = 0xe7b00a25;
+    mitosis_crypto_payload_t data;
+    uint8_t hmac_scratch[MITOSIS_HMAC_OUTPUT_SIZE];
+
+    memcpy(data.data, verify, sizeof(verify));
+    data.counter = counter;
+
+    mitosis_crypto_context_t keys;
+    for(int i = 0; i < 2; ++i) {
+        char* key_half = (i ? "left" : "right");
+
+        result = mitosis_crypto_init(&keys, i);
+        if(!result) {
+            printf("%s: %s mitosis_crypto_init failed!\n", __func__, key_half);
+            return false;
+        }
+
+        keys.encrypt.ctr.iv.counter = data.counter;
+
+        result = mitosis_aes_ctr_encrypt(&keys.encrypt, sizeof(data.data), data.data, data.data);
+        if(!result) {
+            printf("%s: %s mitosis_aes_ctr_encrypt in-place failed!\n", __func__, key_half);
+            return false;
+        }
+
+        result = mitosis_hmac_hash(&keys.hmac, data.data, sizeof(data.data) + sizeof(data.counter));
+        if(!result) {
+            printf("%s: %s mitosis_hmac_hash failed!\n", __func__, key_half);
+            return false;
+        }
+
+        result = mitosis_hmac_complete(&keys.hmac, hmac_scratch);
+        if(!result) {
+            printf("%s: %s mitosis_hmac_complete failed!\n", __func__, key_half);
+            return false;
+        }
+
+        memcpy(data.mac, hmac_scratch, sizeof(data.mac));
+        memset(hmac_scratch, 0, sizeof(hmac_scratch));
+
+        // reinitialize keys to clear any state they had.
+        result = mitosis_crypto_init(&keys, i);
+        if(!result) {
+            printf("%s: second %s mitosis_crypto_init failed!\n", __func__, key_half);
+            return false;
+        }
+
+        result = mitosis_hmac_hash(&keys.hmac, data.data, sizeof(data.data) + sizeof(data.counter));
+        if(!result) {
+            printf("%s: second %s mitosis_hmac_hash failed!\n", __func__, key_half);
+            return false;
+        }
+
+        result = mitosis_hmac_complete(&keys.hmac, hmac_scratch);
+        if(!result) {
+            printf("%s: second %s mitosis_hmac_complete failed!\n", __func__, key_half);
+            return false;
+        }
+
+        if(!compare_expected(data.mac, hmac_scratch, sizeof(data.mac), __func__, key_half)) {
+            printf("%s: %s hash verify failed!\n", __func__, key_half);
+            return false;
+        }
+
+        keys.encrypt.ctr.iv.counter = data.counter;
+
+        result = mitosis_aes_ctr_decrypt(&(keys.encrypt), sizeof(data.data), data.data, data.data);
+        if(!result) {
+            printf("%s: %s mitosis_aes_ctr_decrypt in-place failed!\n", __func__, key_half);
+            return false;
+        }
+
+        if(!compare_expected(data.data, verify, sizeof(verify), __func__, key_half)) {
+            printf("%s: %s data verify failed!\n", __func__, key_half);
+            return false;
+        }
+    }
+
+    return result;
+}
+
 int main(int argc, char** argv) {
     bool result = true;
     int failures = 0;
@@ -527,6 +611,7 @@ int main(int argc, char** argv) {
     RUN_TEST_LOG(aes_ctr_kat);
     RUN_TEST_LOG(verify_key_generation);
     RUN_TEST_LOG(verify_key_encryption_decryption_test);
+    RUN_TEST_LOG(end_to_end_test);
 
     if (result) {
         printf("All tests passed! :)\n");
