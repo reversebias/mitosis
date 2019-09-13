@@ -24,7 +24,7 @@
 
 
 // Define payload length
-#define TX_PAYLOAD_LENGTH 3 ///< 3 byte payload length
+#define TX_PAYLOAD_LENGTH sizeof(mitosis_crypto_payload_t) ///< 24 byte payload length
 
 // ticks for inactive keyboard
 #define INACTIVE 100000
@@ -56,6 +56,11 @@ static bool init_ok, enable_ok, push_ok, pop_ok, packet_received_left, packet_re
 uint32_t left_active = 0;
 uint32_t right_active = 0;
 uint8_t c;
+uint32_t decrypt_collisions = 0;
+uint32_t left_hmac_fail = 0;
+uint32_t right_hmac_fail = 0;
+uint32_t left_decrypt_fail = 0;
+uint32_t right_decrypt_fail = 0;
 
 
 void uart_error_handle(app_uart_evt_t * p_event)
@@ -276,11 +281,25 @@ void nrf_gzll_host_rx_data_ready(uint32_t pipe, nrf_gzll_host_rx_info_t rx_info)
             {
                 // This is a valid message from the left keyboard; decrypt it.
                 left_crypto.encrypt.ctr.iv.counter = payload.counter;
-                mitosis_aes_ctr_decrypt(&left_crypto.encrypt, sizeof(payload.data), payload.data, data_payload_left);
-                packet_received_left = true;
-                left_active = 0;
+                if (mitosis_aes_ctr_decrypt(&left_crypto.encrypt, sizeof(payload.data), payload.data, data_payload_left))
+                {
+                    packet_received_left = true;
+                    left_active = 0;
+                }
+                else
+                {
+                    ++left_decrypt_fail;
+                }
+            }
+            else
+            {
+                ++left_hmac_fail;
             }
             decrypting = false;
+        }
+        else
+        {
+            ++decrypt_collisions;
         }
     }
     else if (pipe == 1)
@@ -299,11 +318,25 @@ void nrf_gzll_host_rx_data_ready(uint32_t pipe, nrf_gzll_host_rx_info_t rx_info)
             {
                 // Valid message from the right keyboard; decrypt it.
                 right_crypto.encrypt.ctr.iv.counter = payload.counter;
-                mitosis_aes_ctr_decrypt(&right_crypto.encrypt, sizeof(payload.data), payload.data, data_payload_right);
-                packet_received_right = true;
-                right_active = 0;
+                if (mitosis_aes_ctr_decrypt(&right_crypto.encrypt, sizeof(payload.data), payload.data, data_payload_right))
+                {
+                    packet_received_right = true;
+                    right_active = 0;
+                }
+                else
+                {
+                    ++right_decrypt_fail;
+                }
+            }
+            else
+            {
+                ++right_hmac_fail;
             }
             decrypting = false;
+        }
+        else
+        {
+            ++decrypt_collisions;
         }
     }
 

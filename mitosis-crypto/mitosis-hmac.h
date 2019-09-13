@@ -7,10 +7,10 @@ Interface for HMAC-SHA256 for Mitosis keyboard
 #define MITOSIS_HMAC_OUTPUT_SIZE 32
 
 typedef struct _mitosis_hmac_context_t {
-    uint8_t need_reset : 1;
+    sha256_context_t sha256_context;
     uint8_t inner_key[SHA256_BLOCK_SIZE];
     uint8_t outer_key[SHA256_BLOCK_SIZE];
-    sha256_context_t sha256_context;
+    uint32_t need_reset : 1;
 } mitosis_hmac_context_t;
 
 bool mitosis_hmac_init(mitosis_hmac_context_t* state, const uint8_t* key, size_t len);

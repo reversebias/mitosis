@@ -24,8 +24,8 @@
 #define MITOSIS_NONCE_INFO "encryption nonce"
 
 typedef struct _mitosis_crypto_context_t {
-    mitosis_hmac_context_t hmac;
     mitosis_encrypt_context_t encrypt;
+    mitosis_hmac_context_t hmac;
 } mitosis_crypto_context_t;
 
 typedef struct _mitosis_crypto_payload_t {

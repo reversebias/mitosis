@@ -22,7 +22,7 @@ const nrf_drv_rtc_t rtc_deb = NRF_DRV_RTC_INSTANCE(1); /**< Declaring an instanc
 
 
 // Define payload length
-#define TX_PAYLOAD_LENGTH sizeof(mitosis_crypto_payload_t) ///< 23 byte payload length when transmitting
+#define TX_PAYLOAD_LENGTH sizeof(mitosis_crypto_payload_t) ///< 24 byte payload length when transmitting
 
 // Data and acknowledgement payloads
 static mitosis_crypto_payload_t data_payload;                  ///< Payload to send to Host.
@@ -44,6 +44,9 @@ static volatile bool debouncing = false;
 
 // Debug helper variables
 static volatile bool init_ok, enable_ok, push_ok, pop_ok, tx_success;
+static volatile uint32_t encrypt_collisions = 0;
+static volatile uint32_t encrypt_failure = 0;
+static volatile uint32_t hmac_failure = 0;
 
 // Setup switch pins with pullups
 static void gpio_config(void)
@@ -117,17 +120,33 @@ static void send_data(void)
                   ((keys & 1<<S23) ? 1:0) << 1 | \
                   0 << 0;
 
-        mitosis_aes_ctr_encrypt(&crypto.encrypt, sizeof(data_payload.data), data_payload.data, data_payload.data);
-        // Copy the used counter and increment at the same time.
-        data_payload.counter = crypto.encrypt.ctr.iv.counter++;
-        // compute hmac on data and counter.
-        mitosis_hmac_hash(&crypto.hmac, data_payload.data, sizeof(data_payload.data) + sizeof(data_payload.counter));
-        mitosis_hmac_complete(&crypto.hmac, hmac_scratch);
-        // copy hmac
-        memcpy(data_payload.mac, hmac_scratch, sizeof(data_payload.mac));
+        if (mitosis_aes_ctr_encrypt(&crypto.encrypt, sizeof(data_payload.data), data_payload.data, data_payload.data))
+        {
+            // Copy the used counter and increment at the same time.
+            data_payload.counter = crypto.encrypt.ctr.iv.counter++;
+            // compute hmac on data and counter.
+            if (mitosis_hmac_hash(&crypto.hmac, data_payload.data, sizeof(data_payload.data) + sizeof(data_payload.counter)) &&
+                mitosis_hmac_complete(&crypto.hmac, hmac_scratch))
+            {
+                // copy hmac
+                memcpy(data_payload.mac, hmac_scratch, sizeof(data_payload.mac));
 
-        nrf_gzll_add_packet_to_tx_fifo(PIPE_NUMBER, (uint8_t*) &data_payload, TX_PAYLOAD_LENGTH);
+                nrf_gzll_add_packet_to_tx_fifo(PIPE_NUMBER, (uint8_t*) &data_payload, TX_PAYLOAD_LENGTH);
+            }
+            else
+            {
+                ++hmac_failure;
+            }
+        }
+        else
+        {
+            ++encrypt_failure;
+        }
         encrypting = false;
+    }
+    else
+    {
+        ++encrypt_collisions;
     }
 }
 
