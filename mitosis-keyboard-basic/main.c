@@ -43,7 +43,10 @@ static uint32_t debounce_ticks, activity_ticks;
 static volatile bool debouncing = false;
 
 // Debug helper variables
-static volatile bool init_ok, enable_ok, push_ok, pop_ok, tx_success;
+static uint16_t max_rtx = 0;
+static uint32_t rtx_count = 0;
+static uint32_t tx_count = 0;
+static uint32_t tx_fail = 0;
 static volatile uint32_t encrypt_collisions = 0;
 static volatile uint32_t encrypt_failure = 0;
 static volatile uint32_t hmac_failure = 0;
@@ -131,7 +134,14 @@ static void send_data(void)
                 // copy hmac
                 memcpy(data_payload.mac, hmac_scratch, sizeof(data_payload.mac));
 
-                nrf_gzll_add_packet_to_tx_fifo(PIPE_NUMBER, (uint8_t*) &data_payload, TX_PAYLOAD_LENGTH);
+                if (nrf_gzll_add_packet_to_tx_fifo(PIPE_NUMBER, (uint8_t*) &data_payload, TX_PAYLOAD_LENGTH))
+                {
+                    ++tx_count;
+                }
+                else
+                {
+                    ++tx_fail;
+                }
             }
             else
             {
@@ -312,6 +322,11 @@ void  nrf_gzll_device_tx_success(uint32_t pipe, nrf_gzll_device_tx_info_t tx_inf
         // Pop packet and write first byte of the payload to the GPIO port.
         nrf_gzll_fetch_packet_from_rx_fifo(pipe, ack_payload, &ack_payload_length);
     }
+    if (tx_info.num_tx_attempts > max_rtx)
+    {
+        max_rtx = tx_info.num_tx_attempts;
+    }
+    rtx_count += tx_info.num_tx_attempts;
 }
 
 // no action is taken when a packet fails to send, this might need to change
