@@ -4,6 +4,7 @@
 #include "mitosis-hmac.h"
 #include "mitosis-hkdf.h"
 #include "mitosis-aes-ctr.h"
+#include "mitosis-cmac.h"
 
 /*
     CHANGE THIS VALUE TO BE UNIQUE TO YOUR MITOSIS KEYBOARD.

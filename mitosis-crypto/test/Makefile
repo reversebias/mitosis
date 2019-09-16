@@ -42,6 +42,7 @@ C_SOURCE_FILES += \
 $(abspath ./main.c) \
 $(abspath ./aes.c) \
 $(abspath ../mitosis-hmac.c) \
+$(abspath ../mitosis-cmac.c) \
 $(abspath ../mitosis-hkdf.c) \
 $(abspath ../mitosis-aes-ctr.c) \
 $(abspath ../mitosis-keys.c) \
@@ -62,7 +63,7 @@ OUTPUT_BINARY_DIRECTORY = bin
 BUILD_DIRECTORIES := $(sort $(OBJECT_DIRECTORY) $(OUTPUT_BINARY_DIRECTORY) $(LISTING_DIRECTORY) )
 
 CFLAGS = -DUNIX
-CFLAGS += -Wall -O3 -g3
+CFLAGS += -Wall -Og -g3
 CFLAGS += -Wno-unused-function
 CFLAGS += -Wno-unused-variable
 
