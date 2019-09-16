@@ -17,7 +17,7 @@ typedef struct _aes_cmac_test_vector {
     uint8_t key[AES_BLOCK_SIZE];
     uint8_t data[65];
     size_t data_len;
-    uint8_t expected[AES_BLOCK_SIZE];
+    uint8_t expected[MITOSIS_CMAC_OUTPUT_SIZE];
     size_t expected_len;
 } aes_cmac_test_vector;
 
@@ -776,8 +776,8 @@ bool verify_key_generation() {
     }
 
     print_hex("       left key", context.encrypt.ctr.key, sizeof(context.encrypt.ctr.key));
-    print_hex("left inner hmac", context.hmac.inner_key, sizeof(context.hmac.inner_key));
-    print_hex("left outer hmac", context.hmac.outer_key, sizeof(context.hmac.outer_key));
+    print_hex("left cmac key 1", context.cmac.key1, sizeof(context.cmac.key1));
+    print_hex("left cmac key 2", context.cmac.key2, sizeof(context.cmac.key2));
     print_hex("     left nonce", context.encrypt.ctr.iv_bytes, sizeof(context.encrypt.ctr.iv_bytes));
 
     result = mitosis_crypto_init(&context, false);
@@ -787,8 +787,8 @@ bool verify_key_generation() {
     }
 
     print_hex("\n       right key", context.encrypt.ctr.key, sizeof(context.encrypt.ctr.key));
-    print_hex("right inner hmac", context.hmac.inner_key, sizeof(context.hmac.inner_key));
-    print_hex("right outer hmac", context.hmac.outer_key, sizeof(context.hmac.outer_key));
+    print_hex("right cmac key 1", context.cmac.key1, sizeof(context.cmac.key1));
+    print_hex("right cmac key 2", context.cmac.key2, sizeof(context.cmac.key2));
     print_hex("     right nonce", context.encrypt.ctr.iv_bytes, sizeof(context.encrypt.ctr.iv_bytes));
 
     return result;
@@ -833,7 +833,7 @@ bool end_to_end_test() {
     const uint8_t verify[] = { 'a', 0xaa, 'c', 0x55 };
     const uint32_t counter = 0xe7b00a25;
     mitosis_crypto_payload_t data;
-    uint8_t hmac_scratch[MITOSIS_HMAC_OUTPUT_SIZE];
+    uint8_t mac_scratch[MITOSIS_CMAC_OUTPUT_SIZE];
 
     memcpy(data.data, verify, sizeof(verify));
     data.counter = counter;
@@ -856,20 +856,11 @@ bool end_to_end_test() {
             return false;
         }
 
-        result = mitosis_hmac_hash(&keys.hmac, data.data, sizeof(data.data) + sizeof(data.counter));
+        result = mitosis_cmac_compute(&keys.cmac, data.data, sizeof(data.data) + sizeof(data.counter), data.mac);
         if(!result) {
-            printf("%s: %s mitosis_hmac_hash failed!\n", __func__, key_half);
+            printf("%s: %s mitosis_cmac_compute failed!\n", __func__, key_half);
             return false;
         }
-
-        result = mitosis_hmac_complete(&keys.hmac, hmac_scratch);
-        if(!result) {
-            printf("%s: %s mitosis_hmac_complete failed!\n", __func__, key_half);
-            return false;
-        }
-
-        memcpy(data.mac, hmac_scratch, sizeof(data.mac));
-        memset(hmac_scratch, 0, sizeof(hmac_scratch));
 
         // reinitialize keys to clear any state they had.
         result = mitosis_crypto_init(&keys, i);
@@ -878,20 +869,14 @@ bool end_to_end_test() {
             return false;
         }
 
-        result = mitosis_hmac_hash(&keys.hmac, data.data, sizeof(data.data) + sizeof(data.counter));
+        result = mitosis_cmac_compute(&keys.cmac, data.data, sizeof(data.data) + sizeof(data.counter), mac_scratch);
         if(!result) {
-            printf("%s: second %s mitosis_hmac_hash failed!\n", __func__, key_half);
+            printf("%s: second %s mitosis_cmac_compute failed!\n", __func__, key_half);
             return false;
         }
 
-        result = mitosis_hmac_complete(&keys.hmac, hmac_scratch);
-        if(!result) {
-            printf("%s: second %s mitosis_hmac_complete failed!\n", __func__, key_half);
-            return false;
-        }
-
-        if(!compare_expected(data.mac, hmac_scratch, sizeof(data.mac), __func__, key_half)) {
-            printf("%s: %s hash verify failed!\n", __func__, key_half);
+        if(!compare_expected(data.mac, mac_scratch, sizeof(data.mac), __func__, key_half)) {
+            printf("%s: %s mac verify failed!\n", __func__, key_half);
             return false;
         }
 

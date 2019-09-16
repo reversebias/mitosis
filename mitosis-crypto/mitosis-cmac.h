@@ -4,6 +4,8 @@
 
 #include "mitosis-aes-ecb.h"
 
+#define MITOSIS_CMAC_OUTPUT_SIZE AES_BLOCK_SIZE
+
 typedef struct _mitosis_cmac_context_t {
     uint8_t key1[AES_BLOCK_SIZE];
     uint8_t key2[AES_BLOCK_SIZE];

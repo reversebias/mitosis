@@ -45,13 +45,13 @@ bool mitosis_crypto_init(mitosis_crypto_context_t* context, bool left) {
     result =
         mitosis_hkdf_expand(
             prk, sizeof(prk),
-            (uint8_t*)MITOSIS_HMAC_KEY_INFO, sizeof(MITOSIS_HMAC_KEY_INFO),
-            prk, sizeof(prk));
+            (uint8_t*)MITOSIS_CMAC_KEY_INFO, sizeof(MITOSIS_CMAC_KEY_INFO),
+            prk, AES_BLOCK_SIZE);
     if(!result) {
         return result;
     }
 
-    result = mitosis_hmac_init(&(context->hmac), prk, sizeof(prk));
+    result = mitosis_cmac_init(&(context->cmac), prk);
     if(!result) {
         return result;
     }

@@ -44,6 +44,7 @@ $(abspath ../../../mitosis-crypto/mitosis-hmac.c) \
 $(abspath ../../../mitosis-crypto/mitosis-hkdf.c) \
 $(abspath ../../../mitosis-crypto/mitosis-keys.c) \
 $(abspath ../../../mitosis-crypto/mitosis-aes-ecb.c) \
+$(abspath ../../../mitosis-crypto/mitosis-cmac.c) \
 $(abspath ../../../mitosis-crypto/mitosis-aes-ctr.c) \
 $(abspath ../../../../components/libraries/util/app_error.c) \
 $(abspath ../../../../components/libraries/util/app_error_weak.c) \

@@ -30,7 +30,6 @@ static uint8_t ack_payload[NRF_GZLL_CONST_MAX_PAYLOAD_LENGTH]; ///< Placeholder 
 
 // Crypto state
 static mitosis_crypto_context_t crypto;
-static uint8_t hmac_scratch[MITOSIS_HMAC_OUTPUT_SIZE];
 static volatile bool encrypting = false;
 
 // Debounce time (dependent on tick frequency)
@@ -49,7 +48,7 @@ static uint32_t tx_count = 0;
 static uint32_t tx_fail = 0;
 static volatile uint32_t encrypt_collisions = 0;
 static volatile uint32_t encrypt_failure = 0;
-static volatile uint32_t hmac_failure = 0;
+static volatile uint32_t cmac_failure = 0;
 
 // Setup switch pins with pullups
 static void gpio_config(void)
@@ -127,13 +126,9 @@ static void send_data(void)
         {
             // Copy the used counter and increment at the same time.
             data_payload.counter = crypto.encrypt.ctr.iv.counter++;
-            // compute hmac on data and counter.
-            if (mitosis_hmac_hash(&crypto.hmac, data_payload.data, sizeof(data_payload.data) + sizeof(data_payload.counter)) &&
-                mitosis_hmac_complete(&crypto.hmac, hmac_scratch))
+            // compute cmac on data and counter.
+            if (mitosis_cmac_compute(&crypto.cmac, data_payload.data, sizeof(data_payload.data) + sizeof(data_payload.counter), data_payload.mac))
             {
-                // copy hmac
-                memcpy(data_payload.mac, hmac_scratch, sizeof(data_payload.mac));
-
                 if (nrf_gzll_add_packet_to_tx_fifo(PIPE_NUMBER, (uint8_t*) &data_payload, TX_PAYLOAD_LENGTH))
                 {
                     ++tx_count;
@@ -145,7 +140,7 @@ static void send_data(void)
             }
             else
             {
-                ++hmac_failure;
+                ++cmac_failure;
             }
         }
         else

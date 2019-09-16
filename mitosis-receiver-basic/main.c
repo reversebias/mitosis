@@ -57,8 +57,8 @@ uint32_t left_active = 0;
 uint32_t right_active = 0;
 uint8_t c;
 uint32_t decrypt_collisions = 0;
-uint32_t left_hmac_fail = 0;
-uint32_t right_hmac_fail = 0;
+uint32_t left_cmac_fail = 0;
+uint32_t right_cmac_fail = 0;
 uint32_t left_decrypt_fail = 0;
 uint32_t right_decrypt_fail = 0;
 
@@ -262,7 +262,7 @@ void nrf_gzll_disabled() {}
 void nrf_gzll_host_rx_data_ready(uint32_t pipe, nrf_gzll_host_rx_info_t rx_info)
 {
     mitosis_crypto_payload_t payload;
-    uint8_t hmac_scratch[MITOSIS_HMAC_OUTPUT_SIZE];
+    uint8_t mac_scratch[MITOSIS_CMAC_OUTPUT_SIZE];
     uint32_t payload_length = sizeof(payload);
 
     if (pipe == 0)
@@ -275,9 +275,8 @@ void nrf_gzll_host_rx_data_ready(uint32_t pipe, nrf_gzll_host_rx_info_t rx_info)
         if (!decrypting)
         {
             decrypting = true;
-            mitosis_hmac_hash(&left_crypto.hmac, payload.data, sizeof(payload.data) + sizeof(payload.counter));
-            mitosis_hmac_complete(&left_crypto.hmac, hmac_scratch);
-            if (memcmp(payload.mac, hmac_scratch, sizeof(payload.mac)) == 0)
+            mitosis_cmac_compute(&left_crypto.cmac, payload.data, sizeof(payload.data) + sizeof(payload.counter), mac_scratch);
+            if (memcmp(payload.mac, mac_scratch, sizeof(payload.mac)) == 0)
             {
                 // This is a valid message from the left keyboard; decrypt it.
                 left_crypto.encrypt.ctr.iv.counter = payload.counter;
@@ -293,7 +292,7 @@ void nrf_gzll_host_rx_data_ready(uint32_t pipe, nrf_gzll_host_rx_info_t rx_info)
             }
             else
             {
-                ++left_hmac_fail;
+                ++left_cmac_fail;
             }
             decrypting = false;
         }
@@ -312,9 +311,8 @@ void nrf_gzll_host_rx_data_ready(uint32_t pipe, nrf_gzll_host_rx_info_t rx_info)
         if (!decrypting)
         {
             decrypting = true;
-            mitosis_hmac_hash(&right_crypto.hmac, payload.data, sizeof(payload.data) + sizeof(payload.counter));
-            mitosis_hmac_complete(&right_crypto.hmac, hmac_scratch);
-            if (memcmp(payload.mac, hmac_scratch, sizeof(payload.mac)) == 0)
+            mitosis_cmac_compute(&right_crypto.cmac, payload.data, sizeof(payload.data) + sizeof(payload.counter), mac_scratch);
+            if (memcmp(payload.mac, mac_scratch, sizeof(payload.mac)) == 0)
             {
                 // Valid message from the right keyboard; decrypt it.
                 right_crypto.encrypt.ctr.iv.counter = payload.counter;
@@ -330,7 +328,7 @@ void nrf_gzll_host_rx_data_ready(uint32_t pipe, nrf_gzll_host_rx_info_t rx_info)
             }
             else
             {
-                ++right_hmac_fail;
+                ++right_cmac_fail;
             }
             decrypting = false;
         }

@@ -20,13 +20,13 @@
 
 #define MITOSIS_ENCRYPT_KEY_INFO "encryption key"
 
-#define MITOSIS_HMAC_KEY_INFO "MAC key"
+#define MITOSIS_CMAC_KEY_INFO "MAC key"
 
 #define MITOSIS_NONCE_INFO "encryption nonce"
 
 typedef struct _mitosis_crypto_context_t {
     mitosis_encrypt_context_t encrypt;
-    mitosis_hmac_context_t hmac;
+    mitosis_cmac_context_t cmac;
 } mitosis_crypto_context_t;
 
 typedef struct _mitosis_crypto_payload_t {
