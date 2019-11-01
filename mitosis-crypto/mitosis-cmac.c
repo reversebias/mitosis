@@ -4,7 +4,7 @@
 #include <string.h>
 #include "mitosis-cmac.h"
 
-static void shiftleft(const uint8_t* in, uint8_t* out)
+static inline void shiftleft(const uint8_t* in, uint8_t* out)
 {
     uint32_t overflow = 0;
     for (int i = 15; i >= 0; --i)
@@ -15,7 +15,7 @@ static void shiftleft(const uint8_t* in, uint8_t* out)
     }
 }
 
-static void xor128(const uint8_t* left, const uint8_t* right, uint8_t* out)
+static inline void xor128(const uint8_t* left, const uint8_t* right, uint8_t* out)
 {
     for (int i = 0; i < 4; ++i)
     {
@@ -23,7 +23,7 @@ static void xor128(const uint8_t* left, const uint8_t* right, uint8_t* out)
     }
 }
 
-static void xor(const uint8_t* left, const uint8_t* right, size_t len, uint8_t* out)
+static inline void xor(const uint8_t* left, const uint8_t* right, size_t len, uint8_t* out)
 {
     int idx = 0;
     for (; len >= 4; idx += 4, len -= 4)
@@ -42,12 +42,14 @@ static void xor(const uint8_t* left, const uint8_t* right, size_t len, uint8_t* 
     }
 }
 
-bool mitosis_cmac_init(mitosis_cmac_context_t* context, uint8_t* key)
+bool mitosis_cmac_init(mitosis_cmac_context_t* context, const uint8_t* key)
 {
     bool result = true;
 
     memcpy(context->ecb.key, key, sizeof(context->ecb.key));
     memset(context->ecb.plaintext, 0, sizeof(context->ecb.plaintext));
+    context->multiblock = false;
+    context->plaintext_index = 0;
 
     result = mitosis_aes_ecb_encrypt(&context->ecb);
     if (!result)
@@ -76,76 +78,96 @@ bool mitosis_cmac_init(mitosis_cmac_context_t* context, uint8_t* key)
     return result;
 }
 
-bool mitosis_cmac_compute(mitosis_cmac_context_t* context, uint8_t* data, size_t datalen, uint8_t* output)
+bool inline mitosis_cmac_hash(mitosis_cmac_context_t* context, const uint8_t* data, size_t data_len)
 {
-    bool result = true;
-    int iterations = (int) (datalen / AES_BLOCK_SIZE);
-    bool complete_last_block = true;
-
-    if (datalen % AES_BLOCK_SIZE)
+    do
     {
-        ++iterations;
-        complete_last_block = false;
-    }
-
-    if (iterations == 0)
-    {
-        iterations = 1;
-        complete_last_block = false;
-    }
-
-    for (int i = 1; i <= iterations - 1; ++i, data += AES_BLOCK_SIZE, datalen -= AES_BLOCK_SIZE)
-    {
-        if (i == 1)
+        int available_space = AES_BLOCK_SIZE - context->plaintext_index;
+        // copy data into plaintext
+        if (data_len <= available_space)
         {
-            memcpy(context->ecb.plaintext, data, sizeof(context->ecb.plaintext));
+            memcpy(context->ecb.plaintext + context->plaintext_index, data, data_len);
+            context->plaintext_index += data_len;
+            data_len = 0;
         }
         else
         {
-            xor128(context->ecb.ciphertext, data, context->ecb.plaintext);
+            memcpy(context->ecb.plaintext + context->plaintext_index, data, available_space);
+            context->plaintext_index += available_space;
+            data += available_space;
+            data_len -= available_space;
         }
 
-        result = mitosis_aes_ecb_encrypt(&context->ecb);
-        if (!result)
+        // if plaintext is full and there's more data left to copy, process plaintext
+        if (context->plaintext_index == AES_BLOCK_SIZE && data_len > 0)
         {
-            return result;
+            // carry forward previous result, if present
+            if (context->multiblock)
+            {
+                xor128(context->ecb.ciphertext, context->ecb.plaintext, context->ecb.plaintext);
+            }
+            // compute hash
+            if (!mitosis_aes_ecb_encrypt(&context->ecb))
+            {
+                return false;
+            }
+            context->multiblock = true;
+            context->plaintext_index = 0;
         }
     }
+    while (data_len > 0);
 
+    return true;
+}
+
+bool inline mitosis_cmac_complete(mitosis_cmac_context_t* context, uint8_t* output)
+{
     // Prepare the last block of data in the plaintext.
-    if (complete_last_block)
+    if (context->plaintext_index == AES_BLOCK_SIZE)
     {
-        xor128(data, context->key1, context->ecb.plaintext);
+        xor128(context->ecb.plaintext, context->key1, context->ecb.plaintext);
     }
     else
     {
         // XOR the remaining data with K2.
-        xor(data, context->key2, datalen, context->ecb.plaintext);
+        xor(context->ecb.plaintext, context->key2, context->plaintext_index, context->ecb.plaintext);
         // XOR K2 with the first byte of padding.
-        context->ecb.plaintext[datalen] = 0x80 ^ context->key2[datalen];
+        context->ecb.plaintext[context->plaintext_index] = 0x80 ^ context->key2[context->plaintext_index];
         // If there's more data, copy K2 into input.
-        if (datalen < 15)
+        if (context->plaintext_index < 15)
         {
             memcpy(
-                context->ecb.plaintext + datalen + 1,
-                context->key2 + datalen + 1,
-                sizeof(context->ecb.plaintext) - datalen - 1);
+                context->ecb.plaintext + context->plaintext_index + 1,
+                context->key2 + context->plaintext_index + 1,
+                sizeof(context->ecb.plaintext) - context->plaintext_index - 1);
         }
     }
 
     // If previous blocks were processed, XOR them into the last block.
-    if (iterations > 1)
+    if (context->multiblock)
     {
         xor128(context->ecb.plaintext, context->ecb.ciphertext, context->ecb.plaintext);
     }
 
-    result = mitosis_aes_ecb_encrypt(&context->ecb);
-    if (!result)
+    if (!mitosis_aes_ecb_encrypt(&context->ecb))
     {
-        return result;
+        return false;
     }
 
     memcpy(output, context->ecb.ciphertext, sizeof(context->ecb.ciphertext));
+    return true;
+}
 
-    return result;
+bool mitosis_cmac_compute(mitosis_cmac_context_t* context, const uint8_t* data, size_t datalen, uint8_t* output)
+{
+    if (!mitosis_cmac_hash(context, data, datalen))
+    {
+        return false;
+    }
+    if (!mitosis_cmac_complete(context, output))
+    {
+        return false;
+    }
+
+    return true;
 }

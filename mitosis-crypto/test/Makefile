@@ -44,6 +44,7 @@ $(abspath ./aes.c) \
 $(abspath ../mitosis-hmac.c) \
 $(abspath ../mitosis-cmac.c) \
 $(abspath ../mitosis-hkdf.c) \
+$(abspath ../mitosis-ckdf.c) \
 $(abspath ../mitosis-aes-ctr.c) \
 $(abspath ../mitosis-keys.c) \
 $(abspath ../../../components/libraries/sha256/sha256.c) \
