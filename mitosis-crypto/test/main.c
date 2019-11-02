@@ -474,7 +474,7 @@ bool cmac_kat() {
     };
     uint8_t output[AES_BLOCK_SIZE];
     mitosis_cmac_context_t context;
-    bool result = mitosis_cmac_init(&context, key);
+    bool result = mitosis_cmac_init(&context, key, sizeof(key));
     if (!result) {
         printf("%s: failed to initialize CMAC\n", __func__);
         return result;
@@ -494,7 +494,7 @@ bool cmac_kat() {
     for (int test_idx = 0; test_idx < sizeof(test_cases)/sizeof(test_cases[0]); ++test_idx) {
         aes_cmac_test_vector* test_case = &test_cases[test_idx];
 
-        result = mitosis_cmac_init(&context, test_case->key);
+        result = mitosis_cmac_init(&context, test_case->key, sizeof(test_case->key));
         if (!result) {
             printf("%s: failed to initialize CMAC\n", __func__);
             return result;

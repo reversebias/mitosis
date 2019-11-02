@@ -8,8 +8,8 @@
 bool
 mitosis_ckdf_extract(const uint8_t* ikm, size_t ikm_len, const uint8_t* salt, size_t salt_len, uint8_t* prk) {
     mitosis_cmac_context_t state;
-    // _Static_assert(salt_len >= AES_BLOCK_SIZE);
-    if (!mitosis_cmac_init(&state, salt)) {
+
+    if (!mitosis_cmac_init(&state, salt, salt_len)) {
         return false;
     }
     return mitosis_cmac_compute(&state, ikm, ikm_len, prk);
@@ -37,8 +37,7 @@ mitosis_ckdf_expand(const uint8_t* prk, size_t prk_len, const uint8_t* info, siz
     // block counter.
     for(uint8_t i = 1; i <= iterations && i > 0; ++i) {
 
-        // _Static_assert(prk_len == AES_BLOCK_SIZE);
-        result = mitosis_cmac_init(&state, prk);
+        result = mitosis_cmac_init(&state, prk, prk_len);
         if(!result) {
             return result;
         }

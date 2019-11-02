@@ -14,7 +14,7 @@ typedef struct _mitosis_cmac_context_t {
     uint32_t plaintext_index : 5;
 } mitosis_cmac_context_t;
 
-bool mitosis_cmac_init(mitosis_cmac_context_t* context, const uint8_t* key);
+bool mitosis_cmac_init(mitosis_cmac_context_t* context, const uint8_t* key, size_t key_len);
 
 bool mitosis_cmac_hash(mitosis_cmac_context_t* context, const uint8_t* data, size_t data_len);
 

@@ -42,19 +42,34 @@ static inline void xor(const uint8_t* left, const uint8_t* right, size_t len, ui
     }
 }
 
-bool mitosis_cmac_init(mitosis_cmac_context_t* context, const uint8_t* key)
+bool mitosis_cmac_init(mitosis_cmac_context_t* context, const uint8_t* key, size_t key_len)
 {
-    bool result = true;
-
-    memcpy(context->ecb.key, key, sizeof(context->ecb.key));
+    if (key_len < sizeof(context->ecb.key))
+    {
+        // Left-pad key with zeroes.
+        uint32_t delta = sizeof(context->ecb.key) - key_len;
+        uint32_t idx = 0;
+        for (; idx < delta; ++idx)
+        {
+            context->ecb.key[idx] = 0;
+        }
+        for (uint32_t key_idx = 0; idx < sizeof(context->ecb.key); ++idx, ++key_idx)
+        {
+            context->ecb.key[idx] = key[key_idx];
+        }
+    }
+    else
+    {
+        // If key length is greater than AES-128 key length, truncate.
+        memcpy(context->ecb.key, key, sizeof(context->ecb.key));
+    }
     memset(context->ecb.plaintext, 0, sizeof(context->ecb.plaintext));
     context->multiblock = false;
     context->plaintext_index = 0;
 
-    result = mitosis_aes_ecb_encrypt(&context->ecb);
-    if (!result)
+    if (!mitosis_aes_ecb_encrypt(&context->ecb))
     {
-        return result;
+        return false;
     }
 
     // Left-shift the output to generate K1.
@@ -75,7 +90,7 @@ bool mitosis_cmac_init(mitosis_cmac_context_t* context, const uint8_t* key)
         context->key2[15] ^= 0x87;
     }
 
-    return result;
+    return true;
 }
 
 bool inline mitosis_cmac_hash(mitosis_cmac_context_t* context, const uint8_t* data, size_t data_len)
@@ -86,12 +101,14 @@ bool inline mitosis_cmac_hash(mitosis_cmac_context_t* context, const uint8_t* da
         // copy data into plaintext
         if (data_len <= available_space)
         {
+            // Note: If this is unaligned, ARM will crash.
             memcpy(context->ecb.plaintext + context->plaintext_index, data, data_len);
             context->plaintext_index += data_len;
             data_len = 0;
         }
         else
         {
+            // Note: If this is unaligned, ARM will crash.
             memcpy(context->ecb.plaintext + context->plaintext_index, data, available_space);
             context->plaintext_index += available_space;
             data += available_space;
@@ -136,6 +153,7 @@ bool inline mitosis_cmac_complete(mitosis_cmac_context_t* context, uint8_t* outp
         // If there's more data, copy K2 into input.
         if (context->plaintext_index < 15)
         {
+            // Note: If this is unaligned, ARM will crash.
             memcpy(
                 context->ecb.plaintext + context->plaintext_index + 1,
                 context->key2 + context->plaintext_index + 1,
