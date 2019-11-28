@@ -51,7 +51,7 @@ bool mitosis_crypto_init(mitosis_crypto_context_t* context, bool left) {
         return result;
     }
 
-    result = mitosis_cmac_init(&(context->cmac), prk);
+    result = mitosis_cmac_init(&(context->cmac), prk, sizeof(prk));
     if(!result) {
         return result;
     }
