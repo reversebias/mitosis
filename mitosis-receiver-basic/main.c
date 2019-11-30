@@ -27,7 +27,7 @@
 #define TX_PAYLOAD_LENGTH sizeof(mitosis_crypto_data_payload_t) ///< 24 byte payload length
 
 // ticks for inactive keyboard
-#define INACTIVE 1000
+#define INACTIVE 10000
 //100000
 
 // Binary printing
@@ -70,7 +70,7 @@ volatile crypto_state_t crypto_state;
 static uint8_t data_payload_left[NRF_GZLL_CONST_MAX_PAYLOAD_LENGTH];  ///< Placeholder for data payload received from host.
 static uint8_t data_payload_right[NRF_GZLL_CONST_MAX_PAYLOAD_LENGTH];  ///< Placeholder for data payload received from host.
 static mitosis_crypto_seed_payload_t ack_payload;                      ///< Payload to attach to ACK sent to device.
-static uint8_t data_buffer[10];
+static uint8_t data_buffer[11];
 
 // Debug helper variables
 extern nrf_gzll_error_code_t nrf_gzll_error_code;   ///< Error code
@@ -87,126 +87,9 @@ uint32_t rng_insufficient = 0;
 uint32_t uart_full = 0;
 
 
-void uart_error_handle(app_uart_evt_t * p_event)
+void mitosis_uart_handler(app_uart_evt_t * p_event)
 {
-    if (p_event->evt_type == APP_UART_DATA_READY)
-    {
-        if (app_uart_get(&c) == NRF_SUCCESS && c == 's')
-        {
-            // sending data to QMK, and an end byte
-            //nrf_drv_uart_tx(data_buffer,11);
-            // app_uart_put(0xE0);
-            // This might be slower than the old method, which might be causing multi-key to fail.
-            for (uint32_t i = 0; i < sizeof(data_buffer); i++)
-            {
-                app_uart_put(data_buffer[i]);
-            }
-            app_uart_put(0xE0);
-        }
-        // if no packets recieved from keyboards in a few seconds, assume either
-        // out of range, or sleeping due to no keys pressed, update keystates to off
-        left_active++;
-        right_active++;
-        if (left_active > INACTIVE)
-        {
-            data_buffer[0] = 0;
-            data_buffer[2] = 0;
-            data_buffer[4] = 0;
-            data_buffer[6] = 0;
-            data_buffer[8] = 0;
-            left_active = 0;
-        }
-        if (right_active > INACTIVE)
-        {
-            data_buffer[1] = 0;
-            data_buffer[3] = 0;
-            data_buffer[5] = 0;
-            data_buffer[7] = 0;
-            data_buffer[9] = 0;
-            right_active = 0;
-        }
-    }
-    // else if (p_event->evt_type == APP_UART_TX_EMPTY)
-    // {
-    //     app_uart_put(0xE0);
-    // }
-    else if (p_event->evt_type == APP_UART_COMMUNICATION_ERROR)
-    {
-        APP_ERROR_HANDLER(p_event->data.error_communication);
-    }
-    else if (p_event->evt_type == APP_UART_FIFO_ERROR)
-    {
-        if (p_event->data.error_code == NRF_ERROR_NO_MEM)
-        {
-            ++uart_full;
-            app_uart_flush();
-            // app_uart_put(0xE0);
-            memset(data_buffer, 0, sizeof(data_buffer));
-        }
-        else
-        {
-            APP_ERROR_HANDLER(p_event->data.error_code);
-        }
-    }
-}
-
-
-int main(void)
-{
-    uint32_t err_code;
-    uint8_t prk[MITOSIS_HMAC_OUTPUT_SIZE];
-    const uint8_t left_salt[sizeof((uint8_t[]) MITOSIS_LEFT_SALT)] = MITOSIS_LEFT_SALT;
-
-    // Enable error correction in the RNG module.
-    NRF_RNG->CONFIG |= RNG_CONFIG_DERCEN_Msk;
-    // Tell the RNG to start running.
-    NRF_RNG->EVENTS_VALRDY = 0;
-    NRF_RNG->TASKS_START = 1;
-
-    // Initialize crypto keys
-    mitosis_crypto_init(&left_crypto[0], left_keyboard_crypto_key);
-    mitosis_crypto_init(&right_crypto, right_keyboard_crypto_key);
-    mitosis_crypto_init(&receiver_crypto, receiver_crypto_key);
-
-
-    // data_buffer[10] = 0xE0;
-    const app_uart_comm_params_t comm_params =
-      {
-          RX_PIN_NUMBER,
-          TX_PIN_NUMBER,
-          RTS_PIN_NUMBER,
-          CTS_PIN_NUMBER,
-          APP_UART_FLOW_CONTROL_DISABLED,
-          false,
-          UART_BAUDRATE_BAUDRATE_Baud1M
-      };
-
-    APP_UART_FIFO_INIT(&comm_params,
-                         UART_RX_BUF_SIZE,
-                         UART_TX_BUF_SIZE,
-                         uart_error_handle,
-                         APP_IRQ_PRIORITY_HIGH,
-                         err_code);
-
-    APP_ERROR_CHECK(err_code);
-
-    // Initialize Gazell
-    nrf_gzll_init(NRF_GZLL_MODE_HOST);
-
-    // Addressing
-    nrf_gzll_set_base_address_0(0x01020304);
-    nrf_gzll_set_base_address_1(0x05060708);
-
-    // Load data into TX queue
-    // ack_payload[0] = 0x55;
-    // nrf_gzll_add_packet_to_tx_fifo(0, data_payload_left, TX_PAYLOAD_LENGTH);
-    // nrf_gzll_add_packet_to_tx_fifo(1, data_payload_left, TX_PAYLOAD_LENGTH);
-
-    // Enable Gazell to start sending over the air
-    nrf_gzll_enable();
-
-    // main loop
-    while (true)
+    if (p_event->evt_type == APP_UART_DATA)
     {
         // detecting received packet from interupt, and unpacking
         if (packet_received_left)
@@ -274,6 +157,188 @@ int main(void)
                              ((data_payload_right[2] & 1<<2) ? 1:0) << 2 |
                              ((data_payload_right[2] & 1<<1) ? 1:0) << 3;
         }
+        if (p_event->data.value == 's')
+        {
+            // sending data to QMK, and an end byte
+            nrf_drv_uart_tx(data_buffer,11);
+            // app_uart_put(0xE0);
+            // This might be slower than the old method, which might be causing multi-key to fail.
+            // for (uint32_t i = 0; i < sizeof(data_buffer); i++)
+            // {
+            //     app_uart_put(data_buffer[i]);
+            // }
+            // app_uart_put(0xE0);
+            nrf_delay_us(10);
+        }
+        // if no packets recieved from keyboards in a few seconds, assume either
+        // out of range, or sleeping due to no keys pressed, update keystates to off
+        left_active++;
+        right_active++;
+        if (left_active > INACTIVE)
+        {
+            data_buffer[0] = 0;
+            data_buffer[2] = 0;
+            data_buffer[4] = 0;
+            data_buffer[6] = 0;
+            data_buffer[8] = 0;
+            left_active = 0;
+        }
+        if (right_active > INACTIVE)
+        {
+            data_buffer[1] = 0;
+            data_buffer[3] = 0;
+            data_buffer[5] = 0;
+            data_buffer[7] = 0;
+            data_buffer[9] = 0;
+            right_active = 0;
+        }
+    }
+    // else if (p_event->evt_type == APP_UART_TX_EMPTY)
+    // {
+    //     app_uart_put(0xE0);
+    // }
+    else if (p_event->evt_type == APP_UART_COMMUNICATION_ERROR)
+    {
+        APP_ERROR_HANDLER(p_event->data.error_communication);
+    }
+    else if (p_event->evt_type == APP_UART_FIFO_ERROR)
+    {
+        if (p_event->data.error_code == NRF_ERROR_NO_MEM)
+        {
+            ++uart_full;
+            app_uart_flush();
+            // app_uart_put(0xE0);
+            memset(data_buffer, 0, sizeof(data_buffer));
+        }
+        else
+        {
+            APP_ERROR_HANDLER(p_event->data.error_code);
+        }
+    }
+}
+
+
+int main(void)
+{
+    uint32_t err_code;
+    uint8_t prk[MITOSIS_HMAC_OUTPUT_SIZE];
+    const uint8_t left_salt[sizeof((uint8_t[]) MITOSIS_LEFT_SALT)] = MITOSIS_LEFT_SALT;
+
+    // Enable error correction in the RNG module.
+    NRF_RNG->CONFIG |= RNG_CONFIG_DERCEN_Msk;
+    // Tell the RNG to start running.
+    NRF_RNG->EVENTS_VALRDY = 0;
+    NRF_RNG->TASKS_START = 1;
+
+    // Initialize crypto keys
+    mitosis_crypto_init(&left_crypto[0], left_keyboard_crypto_key);
+    mitosis_crypto_init(&right_crypto, right_keyboard_crypto_key);
+    mitosis_crypto_init(&receiver_crypto, receiver_crypto_key);
+
+    memset(data_buffer, 0, sizeof(data_buffer));
+    data_buffer[10] = 0xE0;
+    const app_uart_comm_params_t comm_params =
+      {
+          RX_PIN_NUMBER,
+          TX_PIN_NUMBER,
+          RTS_PIN_NUMBER,
+          CTS_PIN_NUMBER,
+          APP_UART_FLOW_CONTROL_DISABLED,
+          false,
+          UART_BAUDRATE_BAUDRATE_Baud1M
+      };
+
+    APP_UART_INIT(&comm_params,
+                  mitosis_uart_handler,
+                  APP_IRQ_PRIORITY_HIGH,
+                  err_code);
+
+    APP_ERROR_CHECK(err_code);
+
+    // Initialize Gazell
+    nrf_gzll_init(NRF_GZLL_MODE_HOST);
+
+    // Addressing
+    nrf_gzll_set_base_address_0(0x01020304);
+    nrf_gzll_set_base_address_1(0x05060708);
+
+    // Load data into TX queue
+    // ack_payload[0] = 0x55;
+    // nrf_gzll_add_packet_to_tx_fifo(0, data_payload_left, TX_PAYLOAD_LENGTH);
+    // nrf_gzll_add_packet_to_tx_fifo(1, data_payload_left, TX_PAYLOAD_LENGTH);
+
+    // Enable Gazell to start sending over the air
+    nrf_gzll_enable();
+
+    // main loop
+    while (true)
+    {
+        // // detecting received packet from interupt, and unpacking
+        // if (packet_received_left)
+        // {
+        //     packet_received_left = false;
+        //
+        //     data_buffer[0] = ((data_payload_left[0] & 1<<3) ? 1:0) << 0 |
+        //                      ((data_payload_left[0] & 1<<4) ? 1:0) << 1 |
+        //                      ((data_payload_left[0] & 1<<5) ? 1:0) << 2 |
+        //                      ((data_payload_left[0] & 1<<6) ? 1:0) << 3 |
+        //                      ((data_payload_left[0] & 1<<7) ? 1:0) << 4;
+        //
+        //     data_buffer[2] = ((data_payload_left[1] & 1<<6) ? 1:0) << 0 |
+        //                      ((data_payload_left[1] & 1<<7) ? 1:0) << 1 |
+        //                      ((data_payload_left[0] & 1<<0) ? 1:0) << 2 |
+        //                      ((data_payload_left[0] & 1<<1) ? 1:0) << 3 |
+        //                      ((data_payload_left[0] & 1<<2) ? 1:0) << 4;
+        //
+        //     data_buffer[4] = ((data_payload_left[1] & 1<<1) ? 1:0) << 0 |
+        //                      ((data_payload_left[1] & 1<<2) ? 1:0) << 1 |
+        //                      ((data_payload_left[1] & 1<<3) ? 1:0) << 2 |
+        //                      ((data_payload_left[1] & 1<<4) ? 1:0) << 3 |
+        //                      ((data_payload_left[1] & 1<<5) ? 1:0) << 4;
+        //
+        //     data_buffer[6] = ((data_payload_left[2] & 1<<5) ? 1:0) << 1 |
+        //                      ((data_payload_left[2] & 1<<6) ? 1:0) << 2 |
+        //                      ((data_payload_left[2] & 1<<7) ? 1:0) << 3 |
+        //                      ((data_payload_left[1] & 1<<0) ? 1:0) << 4;
+        //
+        //     data_buffer[8] = ((data_payload_left[2] & 1<<1) ? 1:0) << 1 |
+        //                      ((data_payload_left[2] & 1<<2) ? 1:0) << 2 |
+        //                      ((data_payload_left[2] & 1<<3) ? 1:0) << 3 |
+        //                      ((data_payload_left[2] & 1<<4) ? 1:0) << 4;
+        // }
+        //
+        // if (packet_received_right)
+        // {
+        //     packet_received_right = false;
+        //
+        //     data_buffer[1] = ((data_payload_right[0] & 1<<7) ? 1:0) << 0 |
+        //                      ((data_payload_right[0] & 1<<6) ? 1:0) << 1 |
+        //                      ((data_payload_right[0] & 1<<5) ? 1:0) << 2 |
+        //                      ((data_payload_right[0] & 1<<4) ? 1:0) << 3 |
+        //                      ((data_payload_right[0] & 1<<3) ? 1:0) << 4;
+        //
+        //     data_buffer[3] = ((data_payload_right[0] & 1<<2) ? 1:0) << 0 |
+        //                      ((data_payload_right[0] & 1<<1) ? 1:0) << 1 |
+        //                      ((data_payload_right[0] & 1<<0) ? 1:0) << 2 |
+        //                      ((data_payload_right[1] & 1<<7) ? 1:0) << 3 |
+        //                      ((data_payload_right[1] & 1<<6) ? 1:0) << 4;
+        //
+        //     data_buffer[5] = ((data_payload_right[1] & 1<<5) ? 1:0) << 0 |
+        //                      ((data_payload_right[1] & 1<<4) ? 1:0) << 1 |
+        //                      ((data_payload_right[1] & 1<<3) ? 1:0) << 2 |
+        //                      ((data_payload_right[1] & 1<<2) ? 1:0) << 3 |
+        //                      ((data_payload_right[1] & 1<<1) ? 1:0) << 4;
+        //
+        //     data_buffer[7] = ((data_payload_right[1] & 1<<0) ? 1:0) << 0 |
+        //                      ((data_payload_right[2] & 1<<7) ? 1:0) << 1 |
+        //                      ((data_payload_right[2] & 1<<6) ? 1:0) << 2 |
+        //                      ((data_payload_right[2] & 1<<5) ? 1:0) << 3;
+        //
+        //     data_buffer[9] = ((data_payload_right[2] & 1<<4) ? 1:0) << 0 |
+        //                      ((data_payload_right[2] & 1<<3) ? 1:0) << 1 |
+        //                      ((data_payload_right[2] & 1<<2) ? 1:0) << 2 |
+        //                      ((data_payload_right[2] & 1<<1) ? 1:0) << 3;
+        // }
 
         // checking for a poll request from QMK
         // if (app_uart_get(&c) == NRF_SUCCESS && c == 's')
