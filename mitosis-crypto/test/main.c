@@ -1005,7 +1005,7 @@ bool end_to_end_test() {
     bool result = true;
     const uint8_t verify[] = { 'a', 0xaa, 'c', 0x55 };
     const uint32_t counter = 0xe7b00a25;
-    mitosis_crypto_payload_t data;
+    mitosis_crypto_data_payload_t data;
     uint8_t mac_scratch[MITOSIS_CMAC_OUTPUT_SIZE];
 
     memcpy(data.data, verify, sizeof(verify));
@@ -1029,7 +1029,7 @@ bool end_to_end_test() {
             return false;
         }
 
-        result = mitosis_cmac_compute(&keys.cmac, data.data, sizeof(data.data) + sizeof(data.counter), data.mac);
+        result = mitosis_cmac_compute(&keys.cmac, data.payload, sizeof(data.payload), data.mac);
         if(!result) {
             printf("%s: %s mitosis_cmac_compute failed!\n", __func__, key_half);
             return false;
@@ -1042,7 +1042,7 @@ bool end_to_end_test() {
             return false;
         }
 
-        result = mitosis_cmac_compute(&keys.cmac, data.data, sizeof(data.data) + sizeof(data.counter), mac_scratch);
+        result = mitosis_cmac_compute(&keys.cmac, data.payload, sizeof(data.payload), mac_scratch);
         if(!result) {
             printf("%s: second %s mitosis_cmac_compute failed!\n", __func__, key_half);
             return false;

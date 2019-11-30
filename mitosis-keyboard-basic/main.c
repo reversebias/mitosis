@@ -1,6 +1,6 @@
 
-#define COMPILE_RIGHT
-//#define COMPILE_LEFT
+// #define COMPILE_RIGHT
+#define COMPILE_LEFT
 
 #include "mitosis.h"
 #include "nrf_drv_config.h"
@@ -22,14 +22,15 @@ const nrf_drv_rtc_t rtc_deb = NRF_DRV_RTC_INSTANCE(1); /**< Declaring an instanc
 
 
 // Define payload length
-#define TX_PAYLOAD_LENGTH sizeof(mitosis_crypto_payload_t) ///< 24 byte payload length when transmitting
+#define TX_PAYLOAD_LENGTH sizeof(mitosis_crypto_data_payload_t) ///< 24 byte payload length when transmitting
 
 // Data and acknowledgement payloads
-static mitosis_crypto_payload_t data_payload;                  ///< Payload to send to Host.
-static uint8_t ack_payload[NRF_GZLL_CONST_MAX_PAYLOAD_LENGTH]; ///< Placeholder for received ACK payloads from Host.
+static mitosis_crypto_data_payload_t data_payload;  ///< Payload to send to Host.
+static mitosis_crypto_seed_payload_t ack_payload;   ///< Payloads received in ACKs from Host.
 
 // Crypto state
 static mitosis_crypto_context_t crypto;
+static mitosis_crypto_context_t receiver_crypto;
 static volatile bool encrypting = false;
 
 // Debounce time (dependent on tick frequency)
@@ -127,7 +128,7 @@ static void send_data(void)
             // Copy the used counter and increment at the same time.
             data_payload.counter = crypto.encrypt.ctr.iv.counter++;
             // compute cmac on data and counter.
-            if (mitosis_cmac_compute(&crypto.cmac, data_payload.data, sizeof(data_payload.data) + sizeof(data_payload.counter), data_payload.mac))
+            if (mitosis_cmac_compute(&crypto.cmac, data_payload.payload, sizeof(data_payload.payload), data_payload.mac))
             {
                 if (nrf_gzll_add_packet_to_tx_fifo(PIPE_NUMBER, (uint8_t*) &data_payload, TX_PAYLOAD_LENGTH))
                 {
@@ -267,12 +268,13 @@ int main()
     NVIC_EnableIRQ(GPIOTE_IRQn);
 
 #ifdef COMPILE_LEFT
-    mitosis_crypto_init(&crypto, true);
+    mitosis_crypto_init(&crypto, left_keyboard_crypto_key);
 #elif defined(COMPILE_RIGHT)
-    mitosis_crypto_init(&crypto, false);
+    mitosis_crypto_init(&crypto, right_keyboard_crypto_key);
 #else
     #error "no keyboard half specified"
 #endif
+    mitosis_crypto_init(&receiver_crypto, receiver_crypto_key);
 
 
     // Main loop, constantly sleep, waiting for RTC and gpio IRQs
@@ -310,12 +312,32 @@ void GPIOTE_IRQHandler(void)
 
 void  nrf_gzll_device_tx_success(uint32_t pipe, nrf_gzll_device_tx_info_t tx_info)
 {
-    uint32_t ack_payload_length = NRF_GZLL_CONST_MAX_PAYLOAD_LENGTH;
+    uint32_t ack_payload_length = sizeof(ack_payload);
+    uint8_t mac_scratch[MITOSIS_CMAC_OUTPUT_SIZE];
+
+    if (pipe != PIPE_NUMBER)
+    {
+        // Ignore responses from the wrong pipe (shouldn't happen).
+        return;
+    }
 
     if (tx_info.payload_received_in_ack)
     {
-        // Pop packet and write first byte of the payload to the GPIO port.
-        nrf_gzll_fetch_packet_from_rx_fifo(pipe, ack_payload, &ack_payload_length);
+        // If the receiver sent back payload, it's a new seed for encryption keys.
+        // Collect this packet and validate.
+        nrf_gzll_fetch_packet_from_rx_fifo(pipe, (uint8_t*) &ack_payload, &ack_payload_length);
+        mitosis_cmac_compute(&receiver_crypto.cmac, ack_payload.payload, sizeof(ack_payload.payload), mac_scratch);
+        if (memcmp(mac_scratch, ack_payload.mac, sizeof(mac_scratch)) == 0)
+        {
+            // The seed packet validates! update the encryption keys.
+            data_payload.key_id = ack_payload.key_id;
+
+            #ifdef COMPILE_LEFT
+            mitosis_crypto_rekey(&crypto, left_keyboard_crypto_key, ack_payload.seed, sizeof(ack_payload.seed));
+            #elif defined(COMPILE_RIGHT)
+            mitosis_crypto_rekey(&crypto, right_keyboard_crypto_key, ack_payload.seed, sizeof(ack_payload.seed));
+            #endif
+        }
     }
     if (tx_info.num_tx_attempts > max_rtx)
     {
