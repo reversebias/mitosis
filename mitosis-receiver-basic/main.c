@@ -418,20 +418,6 @@ int main(void)
                         memcpy(ack_payload.seed, seed, sizeof(ack_payload));
                         seed_index = 0;
                         crypto_state = seed_ready;
-                    }
-                }
-                break;
-            case seed_ready:
-                if (!decrypting)
-                {
-                    decrypting = true;
-
-                    if (mitosis_ckdf_extract(
-                        ack_payload.seed, sizeof(ack_payload.seed),
-                        left_salt, sizeof(left_salt),
-                        prk))
-                    {
-                        crypto_state = prk_ready;
                         new_left_key_id = left_key_id + 1;
                         if (new_left_key_id == 0)
                         {
@@ -439,61 +425,17 @@ int main(void)
                             new_left_key_id = 1;
                         }
                     }
-                    decrypting = false;
                 }
                 break;
-            case prk_ready:
+            case seed_ready:
                 if (!decrypting)
                 {
                     decrypting = true;
-                    if (mitosis_ckdf_expand(
-                        prk, sizeof(prk),
-                        (uint8_t*)MITOSIS_ENCRYPT_KEY_INFO, sizeof(MITOSIS_ENCRYPT_KEY_INFO),
-                        left_crypto[(new_left_key_id & 0x1) + 1].encrypt.ctr.key, sizeof(left_crypto[(new_left_key_id & 0x1) + 1].encrypt.ctr.key)))
+                    if (mitosis_crypto_rekey(&left_crypto[(new_left_key_id & 0x1) + 1], left_keyboard_crypto_key, ack_payload.seed, sizeof(ack_payload.seed)))
                     {
-                        crypto_state = encrypt_key_ready;
+                        crypto_state = new_key_ready;
                     }
                     decrypting = false;
-                }
-                break;
-            case encrypt_key_ready:
-                if (!decrypting)
-                {
-                    decrypting = true;
-                    if (mitosis_ckdf_expand(
-                        prk, sizeof(prk),
-                        (uint8_t*)MITOSIS_NONCE_INFO, sizeof(MITOSIS_NONCE_INFO),
-                        left_crypto[(new_left_key_id & 0x1) + 1].encrypt.ctr.iv_bytes, sizeof(left_crypto[(new_left_key_id & 0x1) + 1].encrypt.ctr.iv_bytes)))
-                    {
-                        left_crypto[(new_left_key_id & 0x1) + 1].encrypt.ctr.iv.counter = 0;
-                        crypto_state = encrypt_nonce_ready;
-                    }
-                    decrypting = false;
-                }
-                break;
-            case encrypt_nonce_ready:
-                if (!decrypting)
-                {
-                    decrypting = true;
-                    if (mitosis_ckdf_expand(
-                        prk, sizeof(prk),
-                        (uint8_t*)MITOSIS_CMAC_KEY_INFO, sizeof(MITOSIS_CMAC_KEY_INFO),
-                        prk, AES_BLOCK_SIZE))
-                    {
-                        crypto_state = mac_key_ready;
-                    }
-                    decrypting = false;
-                }
-                break;
-            case mac_key_ready:
-                if (!decrypting)
-                {
-                    decrypting = true;
-                    mitosis_cmac_init(&(left_crypto[(new_left_key_id & 0x1) + 1].cmac), prk, sizeof(prk));
-                    // mitosis_crypto_rekey(&left_crypto[(new_left_key_id & 0x1) + 1], left_keyboard_crypto_key, ack_payload.seed, sizeof(ack_payload.seed));
-                    decrypting = false;
-                    // new_left_key_id = left_key_id + 1; // I think this has to be done first to make sure the correct crypto context is updated in the array
-                    crypto_state = new_key_ready;
                 }
                 break;
             case new_key_ready:
@@ -501,10 +443,12 @@ int main(void)
                 {
                     decrypting = true;
                     receiver_crypto.encrypt.ctr.iv.counter = ack_payload.key_id = new_left_key_id;
-                    mitosis_aes_ctr_encrypt(&receiver_crypto.encrypt, sizeof(ack_payload.seed), ack_payload.seed, ack_payload.seed);
-                    mitosis_cmac_compute(&receiver_crypto.cmac, ack_payload.payload, sizeof(ack_payload.payload), ack_payload.mac);
+                    if (mitosis_aes_ctr_encrypt(&receiver_crypto.encrypt, sizeof(ack_payload.seed), ack_payload.seed, ack_payload.seed) &&
+                        mitosis_cmac_compute(&receiver_crypto.cmac, ack_payload.payload, sizeof(ack_payload.payload), ack_payload.mac))
+                    {
+                        crypto_state = new_key_payload_ready;
+                    }
                     decrypting = false;
-                    crypto_state = new_key_payload_ready;
                 }
                 break;
             default:
