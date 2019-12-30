@@ -172,6 +172,8 @@ bool inline mitosis_cmac_complete(mitosis_cmac_context_t* context, uint8_t* outp
         return false;
     }
 
+    context->multiblock = false;
+    context->plaintext_index = 0;
     memcpy(output, context->ecb.ciphertext, sizeof(context->ecb.ciphertext));
     return true;
 }

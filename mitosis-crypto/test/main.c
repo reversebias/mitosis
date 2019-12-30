@@ -514,6 +514,57 @@ bool cmac_kat() {
     return result;
 }
 
+bool cmac_reuse_kat() {
+    aes_cmac_test_vector test_data = {
+        {
+            0x2b, 0x7e, 0x15, 0x16, 0x28, 0xae, 0xd2, 0xa6,
+            0xab, 0xf7, 0x15, 0x88, 0x09, 0xcf, 0x4f, 0x3c
+        },
+        {
+            0x6b, 0xc1, 0xbe, 0xe2, 0x2e, 0x40, 0x9f, 0x96,
+            0xe9, 0x3d, 0x7e, 0x11, 0x73, 0x93, 0x17, 0x2a
+        },
+        16,
+        {
+            0x07, 0x0a, 0x16, 0xb4, 0x6b, 0x4d, 0x41, 0x44,
+            0xf7, 0x9b, 0xdd, 0x9d, 0xd0, 0x4a, 0x28, 0x7c
+        },
+        16
+    };
+
+    uint8_t output[AES_BLOCK_SIZE];
+    mitosis_cmac_context_t context;
+    aes_cmac_test_vector *test_case = &test_data;
+    bool result = false;
+
+    result = mitosis_cmac_init(&context, test_case->key, sizeof(test_case->key));
+    if (!result) {
+        printf("%s: failed to initialize CMAC\n", __func__);
+        return result;
+    }
+
+    result = mitosis_cmac_compute(&context,  test_case->data, test_case->data_len, output);
+    if (!result) {
+        printf("%s: failed to compute CMAC\n", __func__);
+        return result;
+    }
+
+    if (!compare_expected(output, test_case->expected, test_case->expected_len, __func__, "first CMAC")) {
+        return false;
+    }
+
+    result = mitosis_cmac_compute(&context,  test_case->data, test_case->data_len, output);
+    if (!result) {
+        printf("%s: failed to compute CMAC\n", __func__);
+        return result;
+    }
+
+    if (!compare_expected(output, test_case->expected, test_case->expected_len, __func__, "second CMAC")) {
+        return false;
+    }
+    return result;
+}
+
 
 bool ckdf_extract_kat() {
 
@@ -1076,6 +1127,7 @@ int main(int argc, char** argv) {
 
     RUN_TEST_LOG(hmac_sha256_kat);
     RUN_TEST_LOG(cmac_kat);
+    RUN_TEST_LOG(cmac_reuse_kat);
     RUN_TEST_LOG(ckdf_extract_kat);
     RUN_TEST_LOG(ckdf_expand_kat);
     RUN_TEST_LOG(hkdf_kat);
