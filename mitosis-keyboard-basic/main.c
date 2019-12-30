@@ -50,6 +50,9 @@ static uint32_t tx_fail = 0;
 static volatile uint32_t encrypt_collisions = 0;
 static volatile uint32_t encrypt_failure = 0;
 static volatile uint32_t cmac_failure = 0;
+static volatile uint32_t rekey_cmac_success = 0;
+static volatile uint32_t rekey_cmac_failure = 0;
+static volatile uint32_t rekey_decrypt_failure = 0;
 
 // Setup switch pins with pullups
 static void gpio_config(void)
@@ -329,14 +332,27 @@ void  nrf_gzll_device_tx_success(uint32_t pipe, nrf_gzll_device_tx_info_t tx_inf
         mitosis_cmac_compute(&receiver_crypto.cmac, ack_payload.payload, sizeof(ack_payload.payload), mac_scratch);
         if (memcmp(mac_scratch, ack_payload.mac, sizeof(mac_scratch)) == 0)
         {
-            // The seed packet validates! update the encryption keys.
-            data_payload.key_id = ack_payload.key_id;
+            ++rekey_cmac_success;
+            receiver_crypto.encrypt.ctr.iv.counter = ack_payload.key_id;
+            if (mitosis_aes_ctr_decrypt(&receiver_crypto.encrypt, sizeof(ack_payload.seed), ack_payload.seed, mac_scratch))
+            {
+                // The seed packet validates! update the encryption keys.
+                data_payload.key_id = ack_payload.key_id;
 
-            #ifdef COMPILE_LEFT
-            mitosis_crypto_rekey(&crypto, left_keyboard_crypto_key, ack_payload.seed, sizeof(ack_payload.seed));
-            #elif defined(COMPILE_RIGHT)
-            mitosis_crypto_rekey(&crypto, right_keyboard_crypto_key, ack_payload.seed, sizeof(ack_payload.seed));
-            #endif
+                #ifdef COMPILE_LEFT
+                mitosis_crypto_rekey(&crypto, left_keyboard_crypto_key, mac_scratch, sizeof(ack_payload.seed));
+                #elif defined(COMPILE_RIGHT)
+                mitosis_crypto_rekey(&crypto, right_keyboard_crypto_key, mac_scratch, sizeof(ack_payload.seed));
+                #endif
+            }
+            else
+            {
+                ++rekey_decrypt_failure;
+            }
+        }
+        else
+        {
+            ++rekey_cmac_failure;
         }
     }
     if (tx_info.num_tx_attempts > max_rtx)

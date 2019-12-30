@@ -223,6 +223,7 @@ int main(void)
     uint32_t err_code;
     uint8_t prk[MITOSIS_HMAC_OUTPUT_SIZE];
     const uint8_t left_salt[sizeof((uint8_t[]) MITOSIS_LEFT_SALT)] = MITOSIS_LEFT_SALT;
+    crypto_state = key_not_ready;
 
     // Enable error correction in the RNG module.
     NRF_RNG->CONFIG |= RNG_CONFIG_DERCEN_Msk;
@@ -421,33 +422,68 @@ int main(void)
                 }
                 break;
             case seed_ready:
-                mitosis_ckdf_extract(
-                    ack_payload.seed, sizeof(ack_payload.seed),
-                    left_salt, sizeof(left_salt),
-                    prk);
-                    crypto_state = prk_ready;
+                if (!decrypting)
+                {
+                    decrypting = true;
+
+                    if (mitosis_ckdf_extract(
+                        ack_payload.seed, sizeof(ack_payload.seed),
+                        left_salt, sizeof(left_salt),
+                        prk))
+                    {
+                        crypto_state = prk_ready;
+                        new_left_key_id = left_key_id + 1;
+                        if (new_left_key_id == 0)
+                        {
+                            // Key id 0 is special (it's the initial key), so skip it.
+                            new_left_key_id = 1;
+                        }
+                    }
+                    decrypting = false;
+                }
                 break;
             case prk_ready:
-                mitosis_ckdf_expand(
-                    prk, sizeof(prk),
-                    (uint8_t*)MITOSIS_ENCRYPT_KEY_INFO, sizeof(MITOSIS_ENCRYPT_KEY_INFO),
-                    left_crypto[(new_left_key_id & 0x1) + 1].encrypt.ctr.key, sizeof(left_crypto[(new_left_key_id & 0x1) + 1].encrypt.ctr.key));
-                    crypto_state = encrypt_key_ready;
+                if (!decrypting)
+                {
+                    decrypting = true;
+                    if (mitosis_ckdf_expand(
+                        prk, sizeof(prk),
+                        (uint8_t*)MITOSIS_ENCRYPT_KEY_INFO, sizeof(MITOSIS_ENCRYPT_KEY_INFO),
+                        left_crypto[(new_left_key_id & 0x1) + 1].encrypt.ctr.key, sizeof(left_crypto[(new_left_key_id & 0x1) + 1].encrypt.ctr.key)))
+                    {
+                        crypto_state = encrypt_key_ready;
+                    }
+                    decrypting = false;
+                }
                 break;
             case encrypt_key_ready:
-                mitosis_ckdf_expand(
-                    prk, sizeof(prk),
-                    (uint8_t*)MITOSIS_NONCE_INFO, sizeof(MITOSIS_NONCE_INFO),
-                    left_crypto[(new_left_key_id & 0x1) + 1].encrypt.ctr.iv_bytes, sizeof(left_crypto[(new_left_key_id & 0x1) + 1].encrypt.ctr.iv_bytes));
-                    left_crypto[(new_left_key_id & 0x1) + 1].encrypt.ctr.iv.counter = 0;
-                    crypto_state = encrypt_nonce_ready;
+                if (!decrypting)
+                {
+                    decrypting = true;
+                    if (mitosis_ckdf_expand(
+                        prk, sizeof(prk),
+                        (uint8_t*)MITOSIS_NONCE_INFO, sizeof(MITOSIS_NONCE_INFO),
+                        left_crypto[(new_left_key_id & 0x1) + 1].encrypt.ctr.iv_bytes, sizeof(left_crypto[(new_left_key_id & 0x1) + 1].encrypt.ctr.iv_bytes)))
+                    {
+                        left_crypto[(new_left_key_id & 0x1) + 1].encrypt.ctr.iv.counter = 0;
+                        crypto_state = encrypt_nonce_ready;
+                    }
+                    decrypting = false;
+                }
                 break;
             case encrypt_nonce_ready:
-                mitosis_ckdf_expand(
-                    prk, sizeof(prk),
-                    (uint8_t*)MITOSIS_CMAC_KEY_INFO, sizeof(MITOSIS_CMAC_KEY_INFO),
-                    prk, AES_BLOCK_SIZE);
-                    crypto_state = mac_key_ready;
+                if (!decrypting)
+                {
+                    decrypting = true;
+                    if (mitosis_ckdf_expand(
+                        prk, sizeof(prk),
+                        (uint8_t*)MITOSIS_CMAC_KEY_INFO, sizeof(MITOSIS_CMAC_KEY_INFO),
+                        prk, AES_BLOCK_SIZE))
+                    {
+                        crypto_state = mac_key_ready;
+                    }
+                    decrypting = false;
+                }
                 break;
             case mac_key_ready:
                 if (!decrypting)
@@ -456,7 +492,7 @@ int main(void)
                     mitosis_cmac_init(&(left_crypto[(new_left_key_id & 0x1) + 1].cmac), prk, sizeof(prk));
                     // mitosis_crypto_rekey(&left_crypto[(new_left_key_id & 0x1) + 1], left_keyboard_crypto_key, ack_payload.seed, sizeof(ack_payload.seed));
                     decrypting = false;
-                    new_left_key_id = left_key_id + 1;
+                    // new_left_key_id = left_key_id + 1; // I think this has to be done first to make sure the correct crypto context is updated in the array
                     crypto_state = new_key_ready;
                 }
                 break;
@@ -517,13 +553,13 @@ void nrf_gzll_host_rx_data_ready(uint32_t pipe, nrf_gzll_host_rx_info_t rx_info)
                     {
                         left_key_id_confirmed = true;
                         left_key_id = new_left_key_id;
+                        // On confirmation, generate new key
                         crypto_state = key_not_ready;
                     }
-                    // DISABLE KEY RENEWAL
-                    // if ((payload.key_id == 0 || payload.counter > 30) && left_key_id_confirmed && crypto_state == new_key_payload_ready)
-                    // {
-                    //     ack_payload_length = sizeof(ack_payload);
-                    // }
+                    if ((payload.key_id == 0 || payload.counter > 100) && left_key_id_confirmed && crypto_state == new_key_payload_ready)
+                    {
+                        ack_payload_length = sizeof(ack_payload);
+                    }
                 }
                 else
                 {
