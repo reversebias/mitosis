@@ -36,32 +36,54 @@
   (byte & 0x01 ? '#' : '.')
 
 // Cryptographic keys and state
+
+// The three cryptographic contexts for the keyboard.
+// Index 0 contains the hard-coded context for key id 0.
+// Index 1 contains the generated context for even-numbered key ids.
+// Index 2 contains the generated context for odd-numbered key ids.
 static mitosis_crypto_context_t left_crypto[3];
 static mitosis_crypto_context_t right_crypto[3];
 static mitosis_crypto_context_t receiver_crypto;
+
+// Whether a encryption/decryption operation is in progress.
 static volatile bool decrypting = false;
 
 static bool process_left = true;
 
-typedef enum _crypto_state_t {
+typedef enum _crypto_rekey_state_t {
     key_not_ready,
     seed_ready,
     new_key_ready,
     new_key_payload_ready
-} crypto_state_t;
+} crypto_rekey_state_t;
 
-typedef struct _crypto_key_state_t {
+typedef struct _crypto_rekey_context_t {
+    // Encrypted and MAC'd material for rekeying.
     mitosis_crypto_seed_payload_t ack_payload;
-    uint8_t seed[15];
-    uint8_t seed_index;
-    crypto_state_t state;
-    uint8_t key_id;
-    uint8_t new_key_id;
-    bool key_id_confirmed;
-} crypto_key_state_t;
 
-crypto_key_state_t left_key_state;
-crypto_key_state_t right_key_state;
+    // Seed value used to generate new cryptographic contexts.
+    uint8_t seed[15];
+
+    // Index into the seed array, used by the RNG when writing the seed.
+    uint8_t seed_index;
+
+    // Current state of new key generation.
+    crypto_rekey_state_t state;
+
+    // Key id for the current cryptographic keys and contexts.
+    uint8_t key_id;
+
+    // Key id for the generated cryptographic keys and contexts, to be used next.
+    uint8_t new_key_id;
+
+    // Flag indicating whether the key id has been confirmed by the keyboard.
+    // When true, a rekeying may be performed. If false, keykeying may not be
+    // performed.
+    bool key_id_confirmed;
+} crypto_rekey_context_t;
+
+crypto_rekey_context_t left_key_state;
+crypto_rekey_context_t right_key_state;
 
 
 // Data and acknowledgement payloads
@@ -87,7 +109,7 @@ keyboard_stats_t right_stats = { 0 };
 uint64_t counter = 0;
 
 static inline
-void key_state_init(crypto_key_state_t *state)
+void crypto_rekey_context_init(crypto_rekey_context_t *state)
 {
     memset(state, 0, sizeof(*state));
     state->state = key_not_ready;
@@ -227,7 +249,11 @@ void mitosis_uart_handler(app_uart_evt_t * p_event)
 }
 
 static inline
-void update_key_state(crypto_key_state_t *key_state, mitosis_crypto_context_t crypto_contexts[], mitosis_crypto_key_type_t key_type)
+void update_rekey_state(
+    crypto_rekey_context_t *key_state,
+    mitosis_crypto_context_t crypto_contexts[],
+    keyboard_stats_t *stats,
+    mitosis_crypto_key_type_t key_type)
 {
     switch (key_state->state)
     {
@@ -255,24 +281,45 @@ void update_key_state(crypto_key_state_t *key_state, mitosis_crypto_context_t cr
             if (!decrypting)
             {
                 decrypting = true;
-                if (mitosis_crypto_rekey(&crypto_contexts[(key_state->new_key_id & 0x1) + 1], key_type, key_state->ack_payload.seed, sizeof(key_state->ack_payload.seed)))
+                if (mitosis_crypto_rekey(
+                        &crypto_contexts[(key_state->new_key_id & 0x1) + 1],
+                        key_type,
+                        key_state->ack_payload.seed,
+                        sizeof(key_state->ack_payload.seed)))
                 {
                     key_state->state = new_key_ready;
                 }
                 decrypting = false;
+            }
+            else
+            {
+                ++stats->decrypt_collisions;
             }
             break;
         case new_key_ready:
             if (!decrypting)
             {
                 decrypting = true;
-                receiver_crypto.encrypt.ctr.iv.counter = key_state->ack_payload.key_id = key_state->new_key_id;
-                if (mitosis_aes_ctr_encrypt(&receiver_crypto.encrypt, sizeof(key_state->ack_payload.seed), key_state->ack_payload.seed, key_state->ack_payload.seed) &&
-                    mitosis_cmac_compute(&receiver_crypto.cmac, key_state->ack_payload.payload, sizeof(key_state->ack_payload.payload), key_state->ack_payload.mac))
+                receiver_crypto.encrypt.ctr.iv.counter = key_state->new_key_id;
+                key_state->ack_payload.key_id = key_state->new_key_id;
+                if (mitosis_aes_ctr_encrypt(
+                        &receiver_crypto.encrypt,
+                        sizeof(key_state->ack_payload.seed),
+                        key_state->ack_payload.seed,
+                        key_state->ack_payload.seed) &&
+                    mitosis_cmac_compute(
+                        &receiver_crypto.cmac,
+                        key_state->ack_payload.payload,
+                        sizeof(key_state->ack_payload.payload),
+                        key_state->ack_payload.mac))
                 {
                     key_state->state = new_key_payload_ready;
                 }
                 decrypting = false;
+            }
+            else
+            {
+                ++stats->decrypt_collisions;
             }
             break;
         default:
@@ -296,8 +343,8 @@ int main(void)
     mitosis_crypto_init(&right_crypto[0], right_keyboard_crypto_key);
     mitosis_crypto_init(&receiver_crypto, receiver_crypto_key);
 
-    key_state_init(&left_key_state);
-    key_state_init(&right_key_state);
+    crypto_rekey_context_init(&left_key_state);
+    crypto_rekey_context_init(&right_key_state);
 
     memset(data_buffer, 0, sizeof(data_buffer));
     data_buffer[10] = 0xE0;
@@ -334,11 +381,11 @@ int main(void)
     {
         if (process_left)
         {
-            update_key_state(&left_key_state, left_crypto, left_keyboard_crypto_key);
+            update_rekey_state(&left_key_state, left_crypto, &left_stats, left_keyboard_crypto_key);
         }
         else
         {
-            update_key_state(&right_key_state, right_crypto, right_keyboard_crypto_key);
+            update_rekey_state(&right_key_state, right_crypto, &right_stats, right_keyboard_crypto_key);
         }
         // This flip/flops between next key generation for the left and right halves.
         process_left = !process_left;
@@ -346,23 +393,45 @@ int main(void)
     }
 }
 
-
-void process_received_packet(mitosis_crypto_context_t crypto[], crypto_key_state_t* key_state, mitosis_crypto_data_payload_t *payload, keyboard_stats_t *stats, uint8_t *decrypted_payload, mitosis_crypto_seed_payload_t **ack_payload, uint32_t *ack_payload_length)
+static inline
+void process_received_packet(
+    mitosis_crypto_context_t crypto[],
+    crypto_rekey_context_t* key_state,
+    mitosis_crypto_data_payload_t *payload,
+    keyboard_stats_t *stats,
+    uint8_t *decrypted_payload,
+    mitosis_crypto_seed_payload_t **ack_payload,
+    uint32_t *ack_payload_length)
 {
     uint8_t mac_scratch[MITOSIS_CMAC_OUTPUT_SIZE];
+    // If a crypto operation is in-progress, just skip the payload and continue.
+    // This could cause missing keypresses, but since the Gazell packet callback
+    // runs at high priority, it's unlikely this will happen.
+    // If it becomes a problem in the future, consider queueing packets and
+    // processing them in the main loop.
     if (!decrypting)
     {
         decrypting = true;
         uint8_t index = (payload->key_id == 0) ? 0 : (payload->key_id & 0x1) + 1;
-        mitosis_cmac_compute(&crypto[index].cmac, payload->payload, sizeof(payload->payload), mac_scratch);
-        if (memcmp(payload->mac, mac_scratch, sizeof(payload->mac)) == 0)
+        if (mitosis_cmac_compute(
+                &crypto[index].cmac,
+                payload->payload,
+                sizeof(payload->payload),
+                mac_scratch) &&
+            memcmp(payload->mac, mac_scratch, sizeof(payload->mac)) == 0)
         {
-            // This is a valid message from the left keyboard; decrypt it.
+            // This is a valid message from the keyboard; decrypt it.
             crypto[index].encrypt.ctr.iv.counter = payload->counter;
-            if (mitosis_aes_ctr_decrypt(&crypto[index].encrypt, sizeof(payload->data), payload->data, decrypted_payload))
+            if (mitosis_aes_ctr_decrypt(
+                    &crypto[index].encrypt,
+                    sizeof(payload->data),
+                    payload->data,
+                    decrypted_payload))
             {
                 stats->packet_received = true;
                 stats->active = 0;
+                // If this packet confirms a key, mark it as confirmed and start
+                // generating the next key.
                 if (key_state->new_key_id != key_state->key_id && key_state->new_key_id == payload->key_id)
                 {
                     key_state->key_id_confirmed = true;
@@ -370,7 +439,9 @@ void process_received_packet(mitosis_crypto_context_t crypto[], crypto_key_state
                     // On confirmation, generate new key
                     key_state->state = key_not_ready;
                 }
-                if ((payload->key_id == 0 || payload->counter > MITOSIS_REKEY_INTERVAL) && key_state->key_id_confirmed && key_state->state == new_key_payload_ready)
+                // Tell the keyboard to rekey with this key material.
+                if ((payload->key_id == 0 || payload->counter > MITOSIS_REKEY_INTERVAL) &&
+                    key_state->key_id_confirmed && key_state->state == new_key_payload_ready)
                 {
                     *ack_payload = &key_state->ack_payload;
                     *ack_payload_length = sizeof(key_state->ack_payload);
@@ -405,7 +476,7 @@ void nrf_gzll_device_tx_success(uint32_t pipe, nrf_gzll_device_tx_info_t tx_info
 void nrf_gzll_device_tx_failed(uint32_t pipe, nrf_gzll_device_tx_info_t tx_info) {}
 void nrf_gzll_disabled() {}
 
-// If a data packet was received, identify half, and throw flag
+// If a data packet was received, identify half, and decrypt it.
 void nrf_gzll_host_rx_data_ready(uint32_t pipe, nrf_gzll_host_rx_info_t rx_info)
 {
     mitosis_crypto_data_payload_t payload;
@@ -417,18 +488,12 @@ void nrf_gzll_host_rx_data_ready(uint32_t pipe, nrf_gzll_host_rx_info_t rx_info)
     {
         // Pop packet and write payload to temp storage for verification.
         nrf_gzll_fetch_packet_from_rx_fifo(pipe, (uint8_t*) &payload, &payload_length);
-        // If a crypto operation is in-progress, just ack the payload and continue.
-        // This could cause missing keypresses, so consider queueing the payload
-        // and process it as soon as this is complete.
         process_received_packet(left_crypto, &left_key_state, &payload, &left_stats, data_payload_left, &ack_payload, &ack_payload_length);
     }
     else if (pipe == 1)
     {
         // Pop packet and write payload to temp storage for verification.
         nrf_gzll_fetch_packet_from_rx_fifo(pipe, (uint8_t*) &payload, &payload_length);
-        // If a crypto operation is in-progress, just ack the payload and continue.
-        // This could cause missing keypresses, so consider queueing the payload
-        // and process it as soon as this is complete.
         process_received_packet(right_crypto, &right_key_state, &payload, &right_stats, data_payload_right, &ack_payload, &ack_payload_length);
     }
 
