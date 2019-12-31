@@ -32,6 +32,15 @@
 
 #define MITOSIS_NONCE_INFO "encryption nonce"
 
+/*
+    The number of encryptions a keyboard half can do before the receiver tells it
+    to update the keys. This doesn't cleanly map to keypresses, since a single
+    press may generate tens of packets.
+
+    Note: Values less than 30 seem cause problems.
+*/
+#define MITOSIS_REKEY_INTERVAL 100
+
 typedef struct _mitosis_crypto_context_t {
     mitosis_encrypt_context_t encrypt;
     mitosis_cmac_context_t cmac;
