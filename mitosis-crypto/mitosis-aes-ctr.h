@@ -29,4 +29,4 @@ bool mitosis_aes_ctr_init(const uint8_t* key, const uint8_t* nonce, mitosis_encr
 
 bool mitosis_aes_ctr_encrypt(mitosis_encrypt_context_t* context, uint32_t datalen, const uint8_t* plaintext, uint8_t* ciphertext);
 
-bool mitosis_aes_ctr_decrypt(mitosis_encrypt_context_t* context, uint32_t datalen, const uint8_t* ciphertext, uint8_t* plaintext);
+#define mitosis_aes_ctr_decrypt(context, datalen, ciphertext, plaintext) mitosis_aes_ctr_encrypt(context, datalen, ciphertext, plaintext)

@@ -4,7 +4,8 @@
 #include <string.h>
 #include "mitosis-cmac.h"
 
-static inline void shiftleft(const uint8_t* in, uint8_t* out)
+static inline
+void shiftleft(const uint8_t* in, uint8_t* out)
 {
     uint32_t overflow = 0;
     for (int i = 15; i >= 0; --i)
@@ -15,7 +16,8 @@ static inline void shiftleft(const uint8_t* in, uint8_t* out)
     }
 }
 
-static inline void xor128(const uint8_t* left, const uint8_t* right, uint8_t* out)
+static inline
+void xor128(const uint8_t* left, const uint8_t* right, uint8_t* out)
 {
     for (int i = 0; i < 4; ++i)
     {
@@ -23,7 +25,8 @@ static inline void xor128(const uint8_t* left, const uint8_t* right, uint8_t* ou
     }
 }
 
-static inline void xor(const uint8_t* left, const uint8_t* right, size_t len, uint8_t* out)
+static inline
+void xor(const uint8_t* left, const uint8_t* right, size_t len, uint8_t* out)
 {
     int idx = 0;
     for (; len >= 4; idx += 4, len -= 4)
@@ -93,7 +96,7 @@ bool mitosis_cmac_init(mitosis_cmac_context_t* context, const uint8_t* key, size
     return true;
 }
 
-bool inline mitosis_cmac_hash(mitosis_cmac_context_t* context, const uint8_t* data, size_t data_len)
+bool mitosis_cmac_hash(mitosis_cmac_context_t* context, const uint8_t* data, size_t data_len)
 {
     do
     {
@@ -137,7 +140,7 @@ bool inline mitosis_cmac_hash(mitosis_cmac_context_t* context, const uint8_t* da
     return true;
 }
 
-bool inline mitosis_cmac_complete(mitosis_cmac_context_t* context, uint8_t* output)
+bool mitosis_cmac_complete(mitosis_cmac_context_t* context, uint8_t* output)
 {
     // Prepare the last block of data in the plaintext.
     if (context->plaintext_index == AES_BLOCK_SIZE)

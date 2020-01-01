@@ -82,13 +82,13 @@ typedef enum _mitosis_crypto_key_type_t {
 
 inline
 bool
-mitosis_crypto_rekey(mitosis_crypto_context_t* context, mitosis_crypto_key_type_t type, uint8_t* seed, size_t seed_len)
+mitosis_crypto_rekey(mitosis_crypto_context_t* context, mitosis_crypto_key_type_t type, const uint8_t* seed, size_t seed_len)
 {
     bool result = true;
     uint8_t prk[MITOSIS_CMAC_OUTPUT_SIZE];
-    const uint8_t left_salt[sizeof((uint8_t[]) MITOSIS_LEFT_SALT)] = MITOSIS_LEFT_SALT;
-    const uint8_t right_salt[sizeof((uint8_t[]) MITOSIS_RIGHT_SALT)] = MITOSIS_RIGHT_SALT;
-    const uint8_t receiver_salt[sizeof((uint8_t[]) MITOSIS_RECEIVER_SALT)] = MITOSIS_RECEIVER_SALT;
+    static const uint8_t left_salt[sizeof((uint8_t[]) MITOSIS_LEFT_SALT)] = MITOSIS_LEFT_SALT;
+    static const uint8_t right_salt[sizeof((uint8_t[]) MITOSIS_RIGHT_SALT)] = MITOSIS_RIGHT_SALT;
+    static const uint8_t receiver_salt[sizeof((uint8_t[]) MITOSIS_RECEIVER_SALT)] = MITOSIS_RECEIVER_SALT;
     const uint8_t* salt;
     size_t salt_len;
 
@@ -115,7 +115,7 @@ mitosis_crypto_rekey(mitosis_crypto_context_t* context, mitosis_crypto_key_type_
             seed, seed_len,
             salt, salt_len,
             prk);
-    if(!result)
+    if (!result)
     {
         return result;
     }
@@ -125,7 +125,7 @@ mitosis_crypto_rekey(mitosis_crypto_context_t* context, mitosis_crypto_key_type_
             prk, sizeof(prk),
             (uint8_t*)MITOSIS_ENCRYPT_KEY_INFO, sizeof(MITOSIS_ENCRYPT_KEY_INFO),
             context->encrypt.ctr.key, sizeof(context->encrypt.ctr.key));
-    if(!result)
+    if (!result)
     {
         return result;
     }
@@ -136,7 +136,7 @@ mitosis_crypto_rekey(mitosis_crypto_context_t* context, mitosis_crypto_key_type_
             (uint8_t*)MITOSIS_NONCE_INFO,
             sizeof(MITOSIS_NONCE_INFO),
             context->encrypt.ctr.iv_bytes, sizeof(context->encrypt.ctr.iv_bytes));
-    if(!result)
+    if (!result)
     {
         return result;
     }
@@ -151,27 +151,24 @@ mitosis_crypto_rekey(mitosis_crypto_context_t* context, mitosis_crypto_key_type_
             prk, sizeof(prk),
             (uint8_t*)MITOSIS_CMAC_KEY_INFO, sizeof(MITOSIS_CMAC_KEY_INFO),
             prk, AES_BLOCK_SIZE);
-    if(!result)
+    if (!result)
     {
         return result;
     }
 
-    result = mitosis_cmac_init(&(context->cmac), prk, sizeof(prk));
-    if(!result)
+    if (!mitosis_cmac_init(&(context->cmac), prk, sizeof(prk)))
     {
-        return result;
+        return false;
     }
 
-    result = mitosis_aes_ecb_init(&(context->encrypt.ecb));
-
-    return result;
+    return mitosis_aes_ecb_init(&(context->encrypt.ecb));
 }
 
 inline
 bool
 mitosis_crypto_init(mitosis_crypto_context_t* context, mitosis_crypto_key_type_t type)
 {
-    uint8_t ikm[sizeof((uint8_t[])MITOSIS_MASTER_SECRET_SEED)] = MITOSIS_MASTER_SECRET_SEED;
+    static const uint8_t ikm[sizeof((uint8_t[])MITOSIS_MASTER_SECRET_SEED)] = MITOSIS_MASTER_SECRET_SEED;
     return mitosis_crypto_rekey(context, type, ikm, sizeof(ikm));
 }
 
