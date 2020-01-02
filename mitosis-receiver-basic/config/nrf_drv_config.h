@@ -66,7 +66,7 @@
 
 #define TIMER1_INSTANCE_INDEX      (TIMER0_ENABLED)
 #endif
- 
+
 #define TIMER2_ENABLED 0
 
 #if (TIMER2_ENABLED == 1)
